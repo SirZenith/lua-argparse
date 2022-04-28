@@ -76,6 +76,7 @@ function Parameter:New(config)
     this.type = config["type"] or "string"
     this.converter = TypeConverter[this.type]
     assert(this.converter, string.format("invalide type for parameter %s: %s", this.name, this.type))
+    this.default = config["default"]
     this.help = config["help"] or nil
 
     return this
@@ -261,7 +262,7 @@ function ArgParser:_SetupDefaultValue()
         local cmd = stack[size]
         stack[size] = nil
 
-        for _, subcmd in ipairs(cmd._subCommands) do
+        for _, subcmd in pairs(cmd._subCommands) do
             table.insert(stack, subcmd)
         end
 
