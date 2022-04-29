@@ -22,6 +22,18 @@ local TypeConverter = {
     end
 }
 
+-- Return true if tab is a empty table
+---@param tab table
+---@return boolean
+local function is_empty(tab)
+    local check = true
+    for _, _ in pairs(tab) do
+        check = false
+        break
+    end
+    return check
+end
+
 -----------------------------------------------------------------------------
 -- Parameter for command
 
@@ -91,6 +103,7 @@ end
 ---@class Command
 ---@field name string
 ---@field help? string
+---@field _subcommand_list Command[] Array storing subcommands. To preserve adding order of subcommands.
 ---@field _subcommands table<string, Command> A table that map subcommand name to Command object.
 ---@field _parameters Parameter[] List for all Parameters
 ---@field _flags table<string, Parameter> A table that map flags to Parameter object.
@@ -108,6 +121,7 @@ function Command:new(config)
     this.name = config["name"]
     this.help = config["help"]
     assert(this.name, "name must be provided for a command")
+    this._subcommand_list = {}
     this._subcommands = {}
     this._parameters = {}
     this._flags = {}
@@ -129,19 +143,33 @@ end
 function Command:_to_string(strlist, indent)
     strlist = strlist or {}
     indent = indent or ""
-    local list
-    local name_sorter = function(a, b) return a.name < b.name end
 
     local title = indent .. self.name
-    if self.help then
-        title = title .. ": " .. self.help
+
+    -- title line
+    if not is_empty(self._subcommands) then
+        title = title .. " [Subcommand]"
+    end
+    if not is_empty(self._flags) then
+        title = title .. " [Options]"
+    end
+    if not is_empty(self._positionals) then
+        local list = {}
+        for _, param in ipairs(self._positionals) do
+            table.insert(list, string.format("<%s>", param.name))
+        end
+        title = title .. " " .. table.concat(list, " ")
     end
     table.insert(strlist, title)
 
-    -- parameter serialize
-    list = { table.unpack(self._parameters) }
-    table.sort(list, name_sorter)
-    for _, param in ipairs(list) do
+    -- help info
+    if self.help then
+        local help = indent .. Command.indent .. ": " .. self.help
+        table.insert(strlist, help)
+    end
+
+    -- parameters
+    for _, param in ipairs(self._parameters) do
         local msg = indent .. Command.indent .. "- " .. tostring(param)
         if param.help and #param.help ~= 0 then
             msg = msg .. ", " .. param.help
@@ -149,19 +177,13 @@ function Command:_to_string(strlist, indent)
         table.insert(strlist, msg)
     end
 
-    -- subcommand serialize
-    list = {}
-    for name, _ in pairs(self._subcommands) do
-        table.insert(list, name)
-    end
-    table.sort(list)
-    if #list ~= 0 then
+    -- subcommands
+    if not is_empty(self._subcommands) then
         table.insert(strlist, "")
         table.insert(strlist, indent .. Command.indent .. "** Subcommands **")
         table.insert(strlist, "")
     end
-    for _, name in ipairs(list) do
-        local cmd = self._subcommands[name]
+    for _, cmd in ipairs(self._subcommand_list) do
         cmd:_to_string(strlist, indent .. Command.indent)
     end
     table.insert(strlist, "")
@@ -186,6 +208,7 @@ do
     function Command:subcommand(commands)
         for _, cmd in ipairs(commands) do
             try_add_to_map(self._subcommands, "Command", cmd.name, cmd)
+            table.insert(self._subcommand_list, cmd)
         end
         return self
     end
@@ -199,7 +222,6 @@ do
                 param = Parameter:new(param)
             end
 
-            table.insert(self._parameters, param)
             if param.long then
                 try_add_to_map(self._flags, "Long Flag", "--" .. param.long, param)
             end
@@ -209,6 +231,7 @@ do
             if not param.long and not param.short then
                 table.insert(self._positionals, param)
             end
+            table.insert(self._parameters, param)
         end
         return self
     end
