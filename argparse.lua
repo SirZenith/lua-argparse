@@ -26,6 +26,8 @@ local TypeConverter = {
 ---@param tab table
 ---@return boolean
 local function is_empty(tab)
+    if not tab then return true end
+
     local check = true
     for _, _ in pairs(tab) do
         check = false
@@ -481,6 +483,10 @@ do
         return string.format("%s (%s)", self.name, self.version)
     end
 
+    function Application:run_help()
+        self._subcommands.help._operation(nil)
+    end
+
     -- Parse argument and run target command operation
     function Application:run()
         local cmd, args, errmsg = self._argParser:parse_arg(self)
@@ -488,8 +494,11 @@ do
             io.stderr:write(errmsg .. "\n")
             os.exit(1)
         end
-        if not cmd or not cmd._operation then return end
-        cmd._operation(args)
+        if not cmd._operation then
+            self:run_help()
+        else
+            cmd._operation(args)
+        end
     end
 end
 

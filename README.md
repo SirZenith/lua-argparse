@@ -97,5 +97,7 @@ and serves as entrance of the program. Besides, it's identical to `Command`.
     - version
   - methods
     - `self:info_str(): string`, return meta info by string.
+    - `self:run_help()`, print help info. `Application` will print its help info
+      if command arguments points to a command without operation.
     - `self:run()`, parse command line argument and run target operation.
 
