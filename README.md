@@ -51,7 +51,8 @@ mapping parameter name to its corresponding value. Users don't really need to us
 this.
 
 `Application` is a special kind of `Command` that sotres more meta infomation,
-and serves as entrance of the program. Besides, it's identical to `Command`.
+and serves as entrance of the program. Besides, it's identical to `Command`. Every
+`Application` will have a `help` command by default.
 
 # API
 
