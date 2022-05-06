@@ -1,7 +1,8 @@
 package = "lua-argparse"
 version = "0.1-0"
 source = {
-    url = "git+https://github.com/SirZenith/lua-argparse.git"
+    url = "git+https://github.com/SirZenith/lua-argparse.git",
+    tag = "v0.1.0"
 }
 description = {
     detailed = [[A simple command line argument parsing script.]],
