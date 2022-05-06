@@ -1,7 +1,7 @@
 package = "lua-argparse"
 version = "0.1.0-1"
 source = {
-    url = "git://github.com/SirZenith/lua-argparse.git",
+    url = "git+https://github.com/SirZenith/lua-argparse.git",
     tag = version
 }
 description = {
