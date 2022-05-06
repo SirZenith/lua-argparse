@@ -1,5 +1,5 @@
 package = "lua-argparse"
-version = "scm-1"
+version = "0.1-0"
 source = {
     url = "https://github.com/SirZenith/lua-argparse"
 }
