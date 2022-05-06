@@ -1,14 +1,16 @@
 package = "lua-argparse"
 version = "0.1-0"
 source = {
-    url = "https://github.com/SirZenith/lua-argparse"
+    url = "git+https://github.com/SirZenith/lua-argparse.git"
 }
 description = {
     detailed = [[A simple command line argument parsing script.]],
     homepage = "https://github.com/SirZenith/lua-argparse",
     license = "MIT/X11"
 }
-dependencies = {}
+dependencies = {
+    "lua >= 5.1, < 5.5"
+}
 build = {
     type = "builtin",
     modules = {
