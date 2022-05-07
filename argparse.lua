@@ -53,10 +53,10 @@ Parameter.__index = Parameter
 
 ---@return string
 function Parameter:__tostring()
-    local str = string.format("%s: %s", self.name, self.type)
+    local str = self.name
 
     if self.short then
-        str = str .. " (-" .. self.long
+        str = str .. " (-" .. self.short
     end
     if self.long and not self.short then
         str = str .. " (--" .. self.long .. ")"
@@ -65,6 +65,8 @@ function Parameter:__tostring()
     elseif self.short then
         str = str .. ")"
     end
+
+    str = str .. ": " .. self.type
 
     return str
 end
