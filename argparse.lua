@@ -513,8 +513,19 @@ do
     ---@param msg_maker fun(param: argparse.Parameter): string Function that makes error messgae based on a Parameter
     local function check_required_paramlist(missing_list, param_list, value_map, msg_maker)
         for _, param in pairs(param_list) do
-            if param.required and value_map[param.name] == nil then
-                table.insert(missing_list, msg_maker(param))
+            if param.required then
+                local is_missing = false
+
+                if param.max_cnt == 1 then
+                    is_missing = value_map[param.name] == nil
+                else
+                    local list = value_map[param.name]
+                    is_missing = not list or #list < 1
+                end
+
+                if is_missing then
+                    table.insert(missing_list, msg_maker(param))
+                end
             end
         end
     end
