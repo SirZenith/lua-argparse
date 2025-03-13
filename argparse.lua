@@ -151,6 +151,28 @@ Command.__index = Command
 Command._indent = "    "
 Command._indent_secondary = "  "
 
+-- Find target command using argument list, returning command found and arguments
+-- left in the list. panic if not command is current binding to ArgParser.
+---@param cmd argparse.Command
+---@param arg_in string[]
+---@return argparse.Command cmd
+---@return string[] argListSlice
+local function direct_to_cmd(cmd, arg_in)
+    local index = 1
+    if not cmd then
+        error("no valid command is passed to ArgParser", 1)
+    end
+
+    while arg_in[index] do
+        local name = arg_in[index]
+        if not cmd._subcommands[name] then break end
+        cmd = cmd._subcommands[name]
+        index = index + 1
+    end
+
+    return cmd, { unpack(arg_in, index, #arg_in) }
+end
+
 -- new creates a new command with given meta config.
 ---@param config table<string, string>
 ---@return argparse.Command
@@ -166,6 +188,29 @@ function Command:new(config)
     this._flags = {}
     this._positionals = {}
     this._operation = nil
+
+    if this.name ~= "help" then
+        this:subcommand {
+            Command:new {
+                name = "help", help = "show help message for command"
+            }:parameter {
+                { name = "path", type = "string", max_cnt = 0 }
+            }:operation(function(args)
+                local path = args.path
+                local target, left_args = this, nil
+
+                if path then
+                    target, left_args = direct_to_cmd(this, path)
+                end
+
+                if not left_args or #left_args == 0 then
+                    print(target)
+                else
+                    print("command not found")
+                end
+            end)
+        }
+    end
 
     return this
 end
@@ -220,28 +265,32 @@ function Command:_to_string(buffer, indent)
 
         table.insert(buffer, indent)
         table.insert(buffer, Command._indent_secondary)
-        table.insert(buffer, "=> ")
+        table.insert(buffer, "|=> ")
         table.insert(buffer, self.help)
-
-        table.insert(buffer, "\n")
     end
 
     -- parameters
-    for _, param in ipairs(self._parameters) do
+    if #self._parameters > 0 then
         table.insert(buffer, "\n")
+        table.insert(buffer, "\n")
+        table.insert(buffer, indent .. Command._indent_secondary .. "|-- Parameters")
 
-        table.insert(buffer, indent)
-        table.insert(buffer, Command._indent)
-        table.insert(buffer, "- ")
-        table.insert(buffer, tostring(param))
-
-        if param.help and #param.help ~= 0 then
+        for _, param in ipairs(self._parameters) do
             table.insert(buffer, "\n")
+
             table.insert(buffer, indent)
             table.insert(buffer, Command._indent)
-            table.insert(buffer, Command._indent_secondary)
-            table.insert(buffer, "=> ")
-            table.insert(buffer, param.help)
+            table.insert(buffer, "- ")
+            table.insert(buffer, tostring(param))
+
+            if param.help and #param.help ~= 0 then
+                table.insert(buffer, "\n")
+                table.insert(buffer, indent)
+                table.insert(buffer, Command._indent)
+                table.insert(buffer, Command._indent_secondary)
+                table.insert(buffer, "|> ")
+                table.insert(buffer, param.help)
+            end
         end
     end
 
@@ -250,11 +299,14 @@ function Command:_to_string(buffer, indent)
         table.insert(buffer, "\n")
         table.insert(buffer, "\n")
         table.insert(buffer, indent .. Command._indent_secondary .. "|-- Subcommands")
-        table.insert(buffer, "\n")
 
         for _, cmd in ipairs(self._subcommand_list) do
             table.insert(buffer, "\n")
-            cmd:_to_string(buffer, indent .. Command._indent)
+            -- cmd:_to_string(buffer, indent .. Command._indent)
+            table.insert(buffer, indent)
+            table.insert(buffer, Command._indent)
+            table.insert(buffer, "* ")
+            table.insert(buffer, cmd.name)
         end
     end
 
@@ -371,28 +423,6 @@ do
             end
         end
         return arg_out
-    end
-
-    -- Find target command using argument list, returning command found and arguments
-    -- left in the list. panic if not command is current binding to ArgParser.
-    ---@param cmd argparse.Command
-    ---@param arg_in string[]
-    ---@return argparse.Command cmd
-    ---@return string[] argListSlice
-    local function direct_to_cmd(cmd, arg_in)
-        local index = 1
-        if not cmd then
-            error("no valid command is passed to ArgParser", 1)
-        end
-
-        while arg_in[index] do
-            local name = arg_in[index]
-            if not cmd._subcommands[name] then break end
-            cmd = cmd._subcommands[name]
-            index = index + 1
-        end
-
-        return cmd, { unpack(arg_in, index, #arg_in) }
     end
 
     -- Store a flag value to arg map, panic when failed
@@ -593,12 +623,6 @@ do
 
         this.version = config["version"] or "0.1.0"
         this._arg_parser = ArgParser:new()
-
-        this:subcommand {
-            Command:new {
-                name = "help", help = "show help message for command"
-            }:operation(function() print(this) end)
-        }
 
         return this
     end

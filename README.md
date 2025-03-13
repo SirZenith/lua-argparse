@@ -69,14 +69,14 @@ parameter name, value type, etc..
 
 `Command` is used for structuring your operation function. A `Command` has help
 info, parameters, operation that bind with it, and subcommands if you want.
+And every `Command` will got a `help` subcommand when they gets created.
 
 `ArgParser`, with a given `Command` and a list of string arguments, it can locate
 target specified by arguments in you command tree, and return a `table<string, any>`
 containing parsed parameters. That table uses parameter's name as key.
 
 `Application` is a extended `Command` that sotres more meta infomation, and serves
-as entrance of your command tree. And every `Application` will got a `help` subcommand
-when they're created.
+as entrance of your command tree.
 
 # API
 
@@ -116,6 +116,10 @@ when they're created.
   This table must contains at least one of `name` or `long`.
 
 ## `Command`
+
+`help` subcommand is added on its creation. Help command also can takes argument,
+passed arguments can be used to index subcommand under current command, and located
+subcommand's help info will get printed instead.
 
 **Fields**
 
@@ -180,8 +184,7 @@ when they're created.
 
 ## `Application`
 
-Inheriting `Command`. Do all things `Command` does, `help` subcommand is added
-on created.
+Inheriting `Command`. Do all things `Command` does.
 
 When executed, if target command specified by argument list has no operation, its
 help message will be printed.
