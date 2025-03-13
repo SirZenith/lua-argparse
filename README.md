@@ -80,49 +80,131 @@ when they're created.
 
 # API
 
-- `Parameter`
-  - fields
-    - name
-    - long
-    - short
-    - required
-    - type
-    - default
-    - help
-  - static methods
-    - `Parameter:new(config: table<string, any>): Parameter`, constructor each
-      field of object can be set by config table passed in, if they appears in
-      the table. Config must contains one of `name` or `long`.
-- `Command`
-  - fields
-    - name
-    - help
-  - static methods
-    - `Command:new(config: table<string, any>): Command`, each field of object
-      can be set by config table passed in, if they appears in the table. Config
-      must have a `name` field.
-  - methods. Each method return `self`, so that chainning method calls are possible.
-    - `self:subcommand(commands: Command[]): Command`, adding commands in list
-      as subcommand.
-    - `self:parameter(params: (Parameter|table<string, any>)[]): Command`,
-      adding parameters in lsit to command. List item can either be `Parameter`
-      or parameter config table.
-    - `self:operation(op: fun(table<string, any>))`, bind operation to command.
-      Operation should be function which takes parameter value map as argument.
-- `ArgParser`
-  - static methods
-    - `ArgParser:new(): ArgParser`, constructor.
-  - methods
-    - `self:parse_arg(cmd: Command, arg_in: string[]?): Command, table<string, any>, string?`,
-    `cmd` is the target command group for parsing. `arg_in` is string argument
-    list, if `nil`, will use `arg` as its value.
-- `Application`, inheriting `Command`. Do all things `Command` does, adding a help
-  command to itself when instantiated.
-  - fields
-    - version
-  - methods
-    - `self:info_str(): string`, return meta info by string.
-    - `self:run_help()`, print help info. `Application` will print its help info
-      if command arguments points to a command without operation.
-    - `self:run()`, parse command line argument and run target operation.
+## `Parameter`
+
+**Fields**
+
+- `name`: Parameter's name, this will be used as key in parsed argument table.
+- `long`: When provided, this parameter becomes a flag. A parameter name can be
+  generated automatical from long flag, by replacing `-` with `_`.
+- `short`: When provided, this parameter becomes a flag.
+- `required`: A boolean value indicating if this parameter must be provided by
+  caller.
+- `type`: Parameter type string, possible values are `string`, `boolean`, `number`.
+- `help`: Help description of this parameter.
+- `default`: Default value of this parameter if you don't want it to be `nil` in
+  parsed argument table when its missing.
+- `max_cnt`: Maximum repeat count of assignment of this parameter. User can pass
+  this parameter from command line, no matter it's a flag or positional one, this
+  many times or less.
+
+  By default this value is one. Otherwise, parsed value of this parameter will be
+  a list instead of a plain value.
+
+  When this value is set to non-positive, this parameter can be repeated infinite
+  many times.
+
+---
+
+**Static methods**
+
+- `Parameter:new(config: ParameterCfg): Parameter`
+
+  constructor. Passed argument is a table, in which keys are field name of this
+  class, and values are corresponding value of each field.
+
+  This table must contains at least one of `name` or `long`.
+
+## `Command`
+
+**Fields**
+
+- `name`: Command's name, used index in command tree, should be unique among its
+  siblings.
+- `help`: Help description for this command.
+
+---
+
+**Static Methods**
+
+- `Command:new(config: CommandCfg): Command`
+
+  constructor. Passed argument is a table, in which keys are field name of this
+  class, and values are corresponding value of each field.
+
+  This table must contains `name` field.
+
+---
+
+**Methods**
+
+  Each method return `self`, so that chainning method calls is possible.
+
+- `self:subcommand(commands: Command[]): Command`
+
+  Adds a list of subcommands as children of current command.
+- `self:parameter(params: (Parameter|ParameterCfg)[]): Command`
+
+  Adds a list of parameters to current command. Each element in the list can either
+  be an actual `Parameter` or a table you passed to `Parameter`'s constructor.
+
+- `self:operation(op: fun(table<string, any>))`
+  Set operation function of this command.
+
+  When command gets executed, parsed argument table will be passed to this function
+  as argument.
+
+## `ArgParser`
+
+**Static Mehtods**
+
+- `ArgParser:new(): ArgParser`
+
+  Constructor.
+
+---
+
+**Methods**
+
+- `self:parse_arg(cmd: Command, arg_in: string[]?): Command?, table<string, any>?, string?`,
+  - `cmd` is the target command tree that needs to be executed.
+  - `arg_in` is string argument list, if its `nil`, global variable `arg` will be used.
+
+  First returned value is target command taken from command tree, specified by
+  given argument list.
+
+  Second argument is parsed argument table, with parameters' name as its keys.
+
+  Any error encountered during parsing argument list, will be propagated to caller
+  as an error message by third return value.
+
+## `Application`
+
+Inheriting `Command`. Do all things `Command` does, `help` subcommand is added
+on created.
+
+When executed, if target command specified by argument list has no operation, its
+help message will be printed.
+
+**Fields**
+
+- `version`: A string value indicating version of this application. Used in generated
+  `help` command.
+
+---
+
+**Method**
+
+- `self:info_str(): string`
+
+  Returns meta info as string.
+- `self:run_help()`
+
+  Prints help info.
+- `self:run_with_args(args_in: stirng[])`
+
+  Takes a stirng argument list, parse it and run target command.
+- `self:run()`
+
+  Parse and run command with global variable `arg` as argument list.
 
