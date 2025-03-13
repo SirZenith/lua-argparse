@@ -1,3 +1,5 @@
+local unpack = unpack or table.unpack
+
 local FLAG_START = "-"
 
 -----------------------------------------------------------------------------
@@ -39,40 +41,66 @@ end
 -----------------------------------------------------------------------------
 -- Parameter for command
 
----@class Parameter Meta info about parameter of a command
----@field long? string Long flag name of parameter.
----@field short? string Short flag name of parameter, default to nil.
----@field name string Name for parameter, if not provided, this will try to be set to long flag name.
----@field required boolean Set whether the parameter must be provided.
----@field type string Type of the parameter.
----@field _converter fun(value: string): boolean, any Function that convert command line string to target type
----@field help string Help info for the parameter.
----@field default any Default value for the parameter.
+---@class argparse.ParameterCfg # A table of data indicating how to create a parameter.
+---@field name string # Name for parameter, if not provided, this will try to be set to long flag name.
+---@field long? string # Long flag name of parameter.
+---@field short? string # Short flag name of parameter, default to nil.
+---@field required? boolean # Set whether the parameter must be provided.
+---@field type string # Type of the parameter.
+---@field help? string # Help info for the parameter.
+---@field default? any # Default value for the parameter.
+---@field max_cnt? integer # Max repeat number of this parameter. Default to 1, non-positive value means infinite.
+
+---@class argparse.Parameter: argparse.ParameterCfg # Meta info about parameter of a command
+---@field _converter fun(value: string): boolean, any # Function that convert command line string to target type
 local Parameter = {}
 Parameter.__index = Parameter
 
 ---@return string
 function Parameter:__tostring()
-    local str = self.name
+    local buffer = { self.name }
+
+    if not self.required then
+        table.insert(buffer, "?")
+    end
 
     if self.short then
-        str = str .. " (-" .. self.short
+        table.insert(buffer, " (-")
+        table.insert(buffer, self.short)
     end
     if self.long and not self.short then
-        str = str .. " (--" .. self.long .. ")"
+        table.insert(buffer, " (--")
+        table.insert(buffer, self.long)
+        table.insert(buffer, ")")
     elseif self.long then
-        str = str .. ", --" .. self.long .. ")"
+        table.insert(buffer, ", --")
+        table.insert(buffer, self.long)
+        table.insert(buffer, ")")
     elseif self.short then
-        str = str .. ")"
+        table.insert(buffer, ")")
     end
 
-    str = str .. ": " .. self.type
+    table.insert(buffer, ": ")
+    table.insert(buffer, self.type)
 
-    return str
+    if self.max_cnt == 1 then
+        -- pass
+    elseif self.max_cnt > 1 then
+        table.insert(buffer, ", ")
+        table.insert(buffer, "max_repeat(")
+        table.insert(buffer, tostring(self.max_cnt))
+        table.insert(buffer, ")")
+    else
+        table.insert(buffer, ", ")
+        table.insert(buffer, "max_repeat(Inf)")
+    end
+
+    return table.concat(buffer)
 end
 
----@param config table<string, any>
----@return Parameter
+-- new creates a new parameter with given config meta.
+---@param config argparse.ParameterCfg
+---@return argparse.Parameter
 function Parameter:new(config)
     local this = setmetatable({}, self)
 
@@ -88,7 +116,7 @@ function Parameter:new(config)
     this.required = config["required"] or false
     this.type = config["type"] or "string"
     this._converter = TypeConverter[this.type]
-    assert(this._converter, string.format("invalide type for parameter %s: %s", this.name, this.type))
+    assert(this._converter, string.format("invalid type for parameter %s: %s", this.name, this.type))
     this.default = config["default"]
     assert(
         this.default == nil or type(this.default) == this.type,
@@ -99,26 +127,32 @@ function Parameter:new(config)
     )
     this.help = config["help"] or nil
 
+    this.max_cnt = type(config.max_cnt) == "number" and config.max_cnt or 1
+
     return this
 end
 
 -----------------------------------------------------------------------------
 
----@class Command
+---@class argparse.CommandCfg # A table of data used to create a new command.
 ---@field name string
 ---@field help? string
----@field _subcommand_list Command[] Array storing subcommands. To preserve adding order of subcommands.
----@field _subcommands table<string, Command> A table that map subcommand name to Command object.
----@field _parameters Parameter[] List for all Parameters
----@field _flags table<string, Parameter> A table that map flags to Parameter object.
----@field _positionals Parameter[] A list for positional arguments
----@field _operation fun(args: table<string, any>) Operation bind to the command, take target command object as input.
+
+---@class argparse.Command: argparse.CommandCfg
+---@field _subcommand_list argparse.Command[] # Array storing subcommands. To preserve adding order of subcommands.
+---@field _subcommands table<string, argparse.Command> # A table that map subcommand name to Command object.
+---@field _parameters argparse.Parameter[] # List for all Parameters
+---@field _flags table<string, argparse.Parameter> # A table that map flags to Parameter object.
+---@field _positionals argparse.Parameter[] # A list for positional arguments
+---@field _operation fun(args: table<string, any>) # Operation bind to the command, take target command object as input.
 local Command = {}
 Command.__index = Command
-Command.indent = "    "
+Command._indent = "    "
+Command._indent_secondary = "  "
 
+-- new creates a new command with given meta config.
 ---@param config table<string, string>
----@return Command
+---@return argparse.Command
 function Command:new(config)
     local this = setmetatable({}, self)
 
@@ -137,62 +171,93 @@ end
 
 ---@return string
 function Command:__tostring()
-    local strList = self:_to_string()
-    return table.concat(strList, "\n")
+    local buffer = self:_to_string()
+    local cnt = 0
+    for _, s in ipairs(buffer) do
+        if s == "\n" then
+            cnt = cnt + 1
+        end
+    end
+    return table.concat(buffer)
 end
 
----@param strlist? string[]
+---@param buffer? string[]
 ---@param indent? string
 ---@return string[]
-function Command:_to_string(strlist, indent)
-    strlist = strlist or {}
+function Command:_to_string(buffer, indent)
+    buffer = buffer or {}
     indent = indent or ""
 
-    local title = indent .. self.name
+    table.insert(buffer, indent)
+    -- if indent ~= "" then
+    table.insert(buffer, "* ")
+    -- end
+    table.insert(buffer, self.name)
 
     -- title line
     if not is_empty(self._subcommands) then
-        title = title .. " [Subcommand]"
+        table.insert(buffer, " [Subcommand]")
     end
     if not is_empty(self._flags) then
-        title = title .. " [Options]"
+        table.insert(buffer, " [Options]")
     end
     if not is_empty(self._positionals) then
-        local list = {}
-        for _, param in ipairs(self._positionals) do
-            table.insert(list, string.format("<%s>", param.name))
+        table.insert(buffer, " ")
+
+        for i, param in ipairs(self._positionals) do
+            if i > 1 then
+                table.insert(buffer, " ")
+            end
+
+            table.insert(buffer, string.format("<%s>", param.name))
         end
-        title = title .. " " .. table.concat(list, " ")
     end
-    table.insert(strlist, title)
 
     -- help info
     if self.help then
-        local help = indent .. Command.indent .. ": " .. self.help
-        table.insert(strlist, help)
+        table.insert(buffer, "\n")
+
+        table.insert(buffer, indent)
+        table.insert(buffer, Command._indent_secondary)
+        table.insert(buffer, "=> ")
+        table.insert(buffer, self.help)
+
+        table.insert(buffer, "\n")
     end
 
     -- parameters
     for _, param in ipairs(self._parameters) do
-        local msg = indent .. Command.indent .. "- " .. tostring(param)
+        table.insert(buffer, "\n")
+
+        table.insert(buffer, indent)
+        table.insert(buffer, Command._indent)
+        table.insert(buffer, "- ")
+        table.insert(buffer, tostring(param))
+
         if param.help and #param.help ~= 0 then
-            msg = msg .. ", " .. param.help
+            table.insert(buffer, "\n")
+            table.insert(buffer, indent)
+            table.insert(buffer, Command._indent)
+            table.insert(buffer, Command._indent_secondary)
+            table.insert(buffer, "=> ")
+            table.insert(buffer, param.help)
         end
-        table.insert(strlist, msg)
     end
 
     -- subcommands
     if not is_empty(self._subcommands) then
-        table.insert(strlist, "")
-        table.insert(strlist, indent .. Command.indent .. "** Subcommands **")
-        table.insert(strlist, "")
-    end
-    for _, cmd in ipairs(self._subcommand_list) do
-        cmd:_to_string(strlist, indent .. Command.indent)
-    end
-    table.insert(strlist, "")
+        table.insert(buffer, "\n")
+        table.insert(buffer, "\n")
+        table.insert(buffer, indent .. Command._indent_secondary .. "|-- Subcommands")
+        table.insert(buffer, "\n")
 
-    return strlist
+        for _, cmd in ipairs(self._subcommand_list) do
+            table.insert(buffer, "\n")
+            cmd:_to_string(buffer, indent .. Command._indent)
+        end
+    end
+
+    return buffer
 end
 
 do
@@ -207,8 +272,8 @@ do
     end
 
     -- Adding subcommands to command
-    ---@param commands Command[]
-    ---@return Command
+    ---@param commands argparse.Command[]
+    ---@return argparse.Command
     function Command:subcommand(commands)
         for _, cmd in ipairs(commands) do
             try_add_to_map(self._subcommands, "Command", cmd.name, cmd)
@@ -217,9 +282,9 @@ do
         return self
     end
 
-    -- Adding parameters to command
-    ---@param parameters Parameter[]|table<string, any>[]
-    ---@return Command
+    -- parameter adds a list of parameters to current command.
+    ---@param parameters (argparse.ParameterCfg | argparse.Parameter)[]
+    ---@return argparse.Command
     function Command:parameter(parameters)
         for _, param in ipairs(parameters) do
             if getmetatable(param) ~= Parameter then
@@ -241,6 +306,8 @@ do
     end
 end
 
+-- operation sets action function to call when command gets ran. `args` is a table
+-- of parsed command arguments.
 ---@param op fun(args: table<string, any>)
 function Command:operation(op)
     self._operation = op
@@ -249,26 +316,28 @@ end
 
 -----------------------------------------------------------------------------
 
----@class ArgParser
----@field _pos_index integer Index of next positional parameter to be used
+---@class argparse.ArgParser
+---@field _pos_index integer # Index of next positional parameter to be used
+---@field _arg_counter table<string, integer> # A map for counting encounter count of each parameter.
 local ArgParser = {}
 ArgParser.__index = ArgParser
 
----@return ArgParser
+-- new creates a new argument parser.
+---@return argparse.ArgParser
 function ArgParser:new()
     local this = setmetatable({}, self)
     this._pos_index = 1
     return this
 end
 
----@param _ Parameter
+---@param _ argparse.Parameter
 function ArgParser:_increment_pos_index(_)
     self._pos_index = self._pos_index + 1
 end
 
 do
     -- Fill all default values into command args map
-    ---@param cmd Command
+    ---@param cmd argparse.Command
     local function setup_default_value(cmd)
         local arg_out = {}
         local stack = { cmd }
@@ -282,11 +351,23 @@ do
             end
 
             for _, flag in pairs(cmd._flags) do
-                arg_out[flag.name] = flag.default
+                local name = flag.name
+
+                if flag.max_cnt and flag.max_cnt ~= 1 then
+                    arg_out[name] = {}
+                else
+                    arg_out[name] = flag.default
+                end
             end
 
             for _, pos in ipairs(cmd._positionals) do
-                arg_out[pos.name] = pos.default
+                local name = pos.name
+
+                if pos.max_cnt and pos.max_cnt ~= 1 then
+                    arg_out[name] = {}
+                else
+                    arg_out[name] = pos.default
+                end
             end
         end
         return arg_out
@@ -294,8 +375,9 @@ do
 
     -- Find target command using argument list, returning command found and arguments
     -- left in the list. panic if not command is current binding to ArgParser.
+    ---@param cmd argparse.Command
     ---@param arg_in string[]
-    ---@return Command cmd
+    ---@return argparse.Command cmd
     ---@return string[] argListSlice
     local function direct_to_cmd(cmd, arg_in)
         local index = 1
@@ -310,12 +392,12 @@ do
             index = index + 1
         end
 
-        return cmd, { table.unpack(arg_in, index, #arg_in) }
+        return cmd, { unpack(arg_in, index, #arg_in) }
     end
 
     -- Store a flag value to arg map, panic when failed
     ---@param args table<string, any>
-    ---@param cmd Command
+    ---@param cmd argparse.Command
     ---@param flag string
     ---@param value any
     local function store_flag(args, cmd, flag, value)
@@ -325,20 +407,42 @@ do
         end
 
         local ok, converted = param._converter(value)
-        if ok then
-            args[param.name] = converted
-        else
-            local msg = string.format("failed to convert '%s' to type %s for flag '%s'", value, param.name, flag)
+        if not ok then
+            local msg = ("failed to convert '%s' to type %s for flag '%s'"):format(value, param.name, flag)
             error(msg, 0)
+        elseif param.max_cnt == 1 then
+            -- single time value
+            local name = param.name
+            if args[name] ~= nil then
+                local msg = ("flag %s should be passed only once"):format(flag)
+                error(msg, 0)
+            end
+
+            args[name] = converted
+        else
+            -- store repeatable value
+            local name = param.name
+            local list = args[name]
+            if not list then
+                list = {}
+                args[name] = list
+            end
+
+            if param.max_cnt > 0 and #list >= param.max_cnt then
+                local msg = ("flag %s is passed more times than allowed"):format(flag)
+                error(msg, 0)
+            end
+
+            table.insert(list, converted)
         end
 
         return nil
     end
 
     -- Store a positional argument to arg map, panic when failed
-    ---@param parser ArgParser
+    ---@param parser argparse.ArgParser
     ---@param args table<string, any>
-    ---@param cmd Command
+    ---@param cmd argparse.Command
     ---@param value any
     local function store_positional(parser, args, cmd, value)
         local param = cmd._positionals[parser._pos_index]
@@ -347,22 +451,37 @@ do
         end
 
         local ok, converted = param._converter(value)
-        if ok then
-            args[param.name] = converted
-            parser:_increment_pos_index(param)
-        else
+        if not ok then
             local msg = string.format(
                 "failed to convert '%s' to type '%s' for positional parameter '%s'",
                 value, param.type, param.name
             )
             error(msg, 0)
+        elseif param.max_cnt == 1 then
+            -- single value argument
+            args[param.name] = converted
+            parser:_increment_pos_index(param)
+        else
+            -- repeatable argument
+            local name = param.name
+            local list = args[name]
+            if not list then
+                list = {}
+                args[name] = list
+            end
+
+            table.insert(list, converted)
+
+            if param.max_cnt > 0 and #list >= param.max_cnt then
+                parser:_increment_pos_index(param)
+            end
         end
     end
 
     -- Read all command argument into arg map panic when failed
-    ---@param parser ArgParser
+    ---@param parser argparse.ArgParser
     ---@param arg_out table<string, any>
-    ---@param cmd Command
+    ---@param cmd argparse.Command
     ---@param arg_in string[]
     local function settle_arguments(parser, arg_out, cmd, arg_in)
         local flag = nil
@@ -390,9 +509,9 @@ do
 
     -- helper function for required parameter checking
     ---@param missing_list string[] Message list for missing parameters.
-    ---@param param_list Parameter[] Parameter list to check.
+    ---@param param_list argparse.Parameter[] Parameter list to check.
     ---@param value_map table<string, any> Table that stores value of each parameter.
-    ---@param msg_maker fun(param: Parameter): string Function that makes error messgae based on a Parameter
+    ---@param msg_maker fun(param: argparse.Parameter): string Function that makes error messgae based on a Parameter
     local function check_required_paramlist(missing_list, param_list, value_map, msg_maker)
         for _, param in pairs(param_list) do
             if param.required and value_map[param.name] == nil then
@@ -403,7 +522,7 @@ do
 
     -- Check whether all required parameters are given, panic if have missing
     ---@param args table<string, any>
-    ---@param cmd Command
+    ---@param cmd argparse.Command
     local function check_all_required(args, cmd)
         local missing = {}
         check_required_paramlist(missing, cmd._flags, args, tostring)
@@ -416,52 +535,56 @@ do
         end
     end
 
-    -- Try to parse arguments and put results in to Command object bind to this parser.
-    -- Return Command specified by arguments and an error message, message is nil when
-    -- no error occured.
-    ---@return Command cmd
+    -- parse_arg tries to parse arguments and put results in to Command object
+    -- binded to this parser.
+    -- Returns target command specified by arguments and a possible error message.
+    ---@param cmd argparse.Command
     ---@param arg_in? string[]
-    ---@return Command cmd
-    ---@return table<string, any> args
-    ---@return string? errmsg
+    ---@return argparse.Command? cmd
+    ---@return table<string, any>? args
+    ---@return string? err
     function ArgParser:parse_arg(cmd, arg_in)
         arg_in = arg_in or arg
         self._pos_index = 1
-        local ok, result, args = pcall(function()
-            local arg_out = setup_default_value(cmd)
 
+        local ok, result, args = pcall(function()
             local left_args
             cmd, left_args = direct_to_cmd(cmd, arg_in)
+
+            local arg_out = setup_default_value(cmd)
             settle_arguments(self, arg_out, cmd, left_args)
+
             check_all_required(arg_out, cmd)
+
             return cmd, arg_out
         end)
+
         if not ok then
-            return nil, nil, result
+            return nil, nil, result --[[@as string]]
         end
+
         return result, args, nil
     end
-
-
 end
 
 -----------------------------------------------------------------------------
 
----@class Application : Command
----@field name string
+---@class argparse.ApplicationCfg : argparse.CommandCfg
 ---@field version string
----@field cmd Command
----@field _argParser ArgParser
+
+---@class argparse.Application : argparse.Command, argparse.ApplicationCfg # A command that has version infomation and help subcommand.
+---@field _argParser argparse.ArgParser
 local Application = setmetatable({}, Command)
 Application.__index = Application
 
 do
     local Super = Command
-    ---@param config table<string, any>
-    ---@return Application
+
+    -- new creates a new application with
+    ---@param config argparse.ApplicationCfg
+    ---@return argparse.Application
     function Application:new(config)
-        ---@type Application
-        local this = Super.new(self, config)
+        local this = Super.new(self, config) --[[@as argparse.Application]]
 
         this.version = config["version"] or "0.1.0"
         this._argParser = ArgParser:new()
@@ -486,21 +609,29 @@ do
     end
 
     function Application:run_help()
-        self._subcommands.help._operation(nil)
+        self._subcommands.help._operation {}
     end
 
-    -- Parse argument and run target command operation
-    function Application:run()
-        local cmd, args, errmsg = self._argParser:parse_arg(self)
-        if errmsg then
-            io.stderr:write(errmsg .. "\n")
+    -- run_with_args parses given arguments and run target command's operation.
+    ---@param args_in string[] # command arguments
+    function Application:run_with_args(args_in)
+        local cmd, args, errmsg = self._argParser:parse_arg(self, args_in)
+        if not cmd or not args or errmsg then
+            io.stderr:write(errmsg or "unknown error")
+            io.stderr:write("\n")
             os.exit(1)
         end
+
         if not cmd._operation then
             self:run_help()
         else
             cmd._operation(args)
         end
+    end
+
+    -- run parses arguments provided by command and run target command's operation.
+    function Application:run()
+        self:run_with_args(arg)
     end
 end
 
