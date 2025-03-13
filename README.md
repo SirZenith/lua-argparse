@@ -5,22 +5,31 @@ local argparse = require "argparse"
 local Application = argparse.Application
 local Command = argparse.Command
 
----@type Application
 local app = Application
     :new {
         name = "foo", version = "0.1.0", help = "sample command"
     }:subcommand {
         Command:new {
-            name = "sub-1", help = "sample subcommand"
+            name = "say", help = "sample subcommand"
         }:parameter {
-            { name = "input", required = true, help = "input string data" },
             {
-                long = "repeat-count", short = "n", type = "number", default = 1,
-                help = "print input this much times."
+                name = "input",
+                type = "string",
+                required = true,
+                max_cnt = 0,
+                help = "input string data"
+            },
+            {
+                long = "repeat-count",
+                short = "n",
+                type = "number",
+                default = 1,
+                help = "print input this much times"
             }
         }:operation(function(args)
+            local input = table.concat(args.input, ", ")
             for _ = 1, args.repeat_count do
-                print(args.input)
+                print(input)
             end
         end)
     }
@@ -28,19 +37,34 @@ local app = Application
 app:run()
 ```
 
-Save above code into file `example.lua` and run following command to see how it
-works.
+Save this code snippet into `example.lua`, then you can print help message with
+command:
 
 ```
 lua example.lua help
-lua example.lua sub-1 -n 10 test
+```
+
+Try running it with some arguments:
+
+```
+lua example.lua say hello world -n 5
+```
+
+This command generates following output:
+
+```
+hello, world
+hello, world
+hello, world
+hello, world
+hello, world
 ```
 
 # Overview
 
 This script provide type `Parameter`, `Command`, `ArgParser`, `Application`.
 
-`Parameter` is a struct where you put all you specification of arguments. Like 
+`Parameter` is a struct where you put all you specification of arguments. Like
 parameter name, value type, etc..
 
 `Command` is used for structuring operation. A `Command` has help info, parameters,
@@ -67,7 +91,7 @@ and serves as entrance of the program. Besides, it's identical to `Command`. Eve
     - help
   - static methods
     - `Parameter:new(config: table<string, any>): Parameter`, constructor each
-      field of object can be set by config table passed in, if they appears in 
+      field of object can be set by config table passed in, if they appears in
       the table. Config must contains one of `name` or `long`.
 - `Command`
   - fields
