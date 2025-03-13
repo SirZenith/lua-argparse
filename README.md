@@ -67,16 +67,16 @@ This script provide type `Parameter`, `Command`, `ArgParser`, `Application`.
 `Parameter` is a struct where you put all you specification of arguments. Like
 parameter name, value type, etc..
 
-`Command` is used for structuring operation. A `Command` has help info, parameters,
-operation that bind with the command, and sometimes with several subcommands.
+`Command` is used for structuring your operation function. A `Command` has help
+info, parameters, operation that bind with it, and subcommands if you want.
 
-`ArgParser` provide API to parse string argument list into a `table<string, any>`,
-mapping parameter name to its corresponding value. Users don't really need to use
-this.
+`ArgParser`, with a given `Command` and a list of string arguments, it can locate
+target specified by arguments in you command tree, and return a `table<string, any>`
+containing parsed parameters. That table uses parameter's name as key.
 
-`Application` is a special kind of `Command` that sotres more meta infomation,
-and serves as entrance of the program. Besides, it's identical to `Command`. Every
-`Application` will have a `help` command by default.
+`Application` is a extended `Command` that sotres more meta infomation, and serves
+as entrance of your command tree. And every `Application` will got a `help` subcommand
+when they're created.
 
 # API
 
