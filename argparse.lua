@@ -313,6 +313,14 @@ function Command:_to_string(buffer, indent)
     return buffer
 end
 
+-- run_help runs `help` subcommand of current command if it exists.
+function Command:run_help()
+    local cmd = self._subcommands.help
+    if cmd then
+        cmd._operation {}
+    end
+end
+
 do
     ---@param map table<string, any>
     ---@param mapName string
@@ -635,10 +643,6 @@ do
 
     function Application:info_str()
         return string.format("%s (%s)", self.name, self.version)
-    end
-
-    function Application:run_help()
-        self._subcommands.help._operation {}
     end
 
     -- run_with_args parses given arguments and run target command's operation.

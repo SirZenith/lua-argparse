@@ -144,6 +144,10 @@ subcommand's help info will get printed instead.
 
   Each method return `self`, so that chainning method calls is possible.
 
+- `self:run_help()`
+
+  Run `help` subcommand of current if it exists.
+
 - `self:subcommand(commands: Command[]): Command`
 
   Adds a list of subcommands as children of current command.
@@ -201,9 +205,6 @@ help message will be printed.
 - `self:info_str(): string`
 
   Returns meta info as string.
-- `self:run_help()`
-
-  Prints help info.
 - `self:run_with_args(args_in: stirng[])`
 
   Takes a stirng argument list, parse it and run target command.
