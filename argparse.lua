@@ -52,6 +52,7 @@ end
 ---@field max_cnt? integer # Max repeat number of this parameter. Default to 1, non-positive value means infinite.
 
 ---@class argparse.Parameter: argparse.ParameterCfg # Meta info about parameter of a command
+---@field name string
 ---@field _converter fun(value: string): boolean, any # Function that convert command line string to target type
 local Parameter = {}
 Parameter.__index = Parameter
@@ -106,7 +107,7 @@ function Parameter:new(config)
 
     this.long = config["long"]
     this.short = config["short"] or nil
-    this.name = config["name"] or (this.long and this.long:gsub("-", "_") or nil)
+    this.name = config["name"] or (this.long and this.long:gsub("-", "_") or "")
     assert(this.name, "parameter must have a name or long flag name.")
     assert(
         this.short == nil or #this.short == 1,
@@ -411,13 +412,7 @@ do
             error(msg, 0)
         elseif param.max_cnt == 1 then
             -- single time value
-            local name = param.name
-            if args[name] ~= nil then
-                local msg = ("flag %s should be passed only once"):format(flag)
-                error(msg, 0)
-            end
-
-            args[name] = converted
+            args[param.name] = converted
         else
             -- store repeatable value
             local name = param.name
