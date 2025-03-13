@@ -318,7 +318,6 @@ end
 
 ---@class argparse.ArgParser
 ---@field _pos_index integer # Index of next positional parameter to be used
----@field _arg_counter table<string, integer> # A map for counting encounter count of each parameter.
 local ArgParser = {}
 ArgParser.__index = ArgParser
 
@@ -573,7 +572,7 @@ end
 ---@field version string
 
 ---@class argparse.Application : argparse.Command, argparse.ApplicationCfg # A command that has version infomation and help subcommand.
----@field _argParser argparse.ArgParser
+---@field _arg_parser argparse.ArgParser
 local Application = setmetatable({}, Command)
 Application.__index = Application
 
@@ -587,7 +586,7 @@ do
         local this = Super.new(self, config) --[[@as argparse.Application]]
 
         this.version = config["version"] or "0.1.0"
-        this._argParser = ArgParser:new()
+        this._arg_parser = ArgParser:new()
 
         this:subcommand {
             Command:new {
@@ -615,7 +614,7 @@ do
     -- run_with_args parses given arguments and run target command's operation.
     ---@param args_in string[] # command arguments
     function Application:run_with_args(args_in)
-        local cmd, args, errmsg = self._argParser:parse_arg(self, args_in)
+        local cmd, args, errmsg = self._arg_parser:parse_arg(self, args_in)
         if not cmd or not args or errmsg then
             io.stderr:write(errmsg or "unknown error")
             io.stderr:write("\n")
