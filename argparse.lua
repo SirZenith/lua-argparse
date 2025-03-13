@@ -42,7 +42,7 @@ end
 -- Parameter for command
 
 ---@class argparse.ParameterCfg # A table of data indicating how to create a parameter.
----@field name string # Name for parameter, if not provided, this will try to be set to long flag name.
+---@field name? string # Name for parameter, if not provided, this will try to be set to long flag name.
 ---@field long? string # Long flag name of parameter.
 ---@field short? string # Short flag name of parameter, default to nil.
 ---@field required? boolean # Set whether the parameter must be provided.
