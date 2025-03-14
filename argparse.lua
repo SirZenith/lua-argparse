@@ -50,7 +50,8 @@ end
 ---@field help? string # Help info for the parameter.
 ---@field default? any # Default value for the parameter.
 ---@field max_cnt? integer # Max repeat number of this parameter. Default to 1, non-positive value means infinite.
----@field is_hidden? boolean # If this parameter should be hidden in command's help message
+---@field is_hidden? boolean # If this parameter should be hidden in command's help message.
+---@field topics? string[] # A list of topics this parameter belongs to.
 
 ---@class argparse.Parameter: argparse.ParameterCfg # Meta info about parameter of a command
 ---@field name string
@@ -162,6 +163,14 @@ function Parameter:new(config)
     this.max_cnt = type(config.max_cnt) == "number" and config.max_cnt or 1
     this.is_hidden = config.is_hidden
 
+    if config.topics then
+        local topics = {}
+        for _, topic in ipairs(config.topics) do
+            table.insert(topics, topic)
+        end
+        this.topics = topics
+    end
+
     return this
 end
 
@@ -170,12 +179,37 @@ function Parameter:is_flag()
     return self.short ~= nil or self.long ~= nil
 end
 
+-- is_match_topic check wheather current command belongs given topic.
+---@param topic? string
+---@return boolean
+function Parameter:is_match_topic(topic)
+    if topic == nil then
+        return true
+    end
+
+    if not self.topics then
+        return false
+    end
+
+    local is_match = false
+    for _, value in ipairs(self.topics) do
+        is_match = value == topic
+        if is_match then
+            break
+        end
+    end
+
+    return is_match
+end
+
 -----------------------------------------------------------------------------
 
 ---@class argparse.CommandCfg # A table of data used to create a new command.
 ---@field name string
 ---@field help? string
----@field is_hidden? boolean # If this command should be hidden in help message
+---@field is_hidden? boolean # If this command should be hidden in help message.
+---@field topics? string[] # A list of topics this command belongs to.
+---@field no_help_cmd? boolean # Do not create help command when construct new command.
 
 ---@class argparse.Command: argparse.CommandCfg
 ---@field _subcommand_list argparse.Command[] # Array storing subcommands. To preserve adding order of subcommands.
@@ -222,6 +256,14 @@ function Command:new(config)
     this.help = config.help
     this.is_hidden = config.is_hidden
 
+    if config.topics then
+        local topics = {}
+        for _, topic in ipairs(config.topics) do
+            table.insert(topics, topic)
+        end
+        this.topics = topics
+    end
+
     this._subcommand_list = {}
     this._subcommands = {}
     this._parameters = {}
@@ -229,26 +271,9 @@ function Command:new(config)
     this._positionals = {}
     this._operation = nil
 
-    if this.name ~= "help" then
+    if not config.no_help_cmd then
         this:subcommand {
-            Command:new {
-                name = "help", help = "show help message for command"
-            }:parameter {
-                { name = "path", type = "string", max_cnt = 0 }
-            }:operation(function(args)
-                local path = args.path
-                local target, left_args = this, nil
-
-                if path then
-                    target, left_args = direct_to_cmd(this, path)
-                end
-
-                if not left_args or #left_args == 0 then
-                    print(target)
-                else
-                    print("command not found")
-                end
-            end)
+            this:_make_help_cmd()
         }
     end
 
@@ -257,20 +282,25 @@ end
 
 ---@return string
 function Command:__tostring()
-    local buffer = self:_to_string()
+    local buffer = self:_generate_help_message_buffer()
     return table.concat(buffer)
 end
 
+---@class argparse.CommandHelpArgs
+---@field show_all? boolean # When set to `true`, all hidden parameters and subcommands will be shown.
+---@field topic? string # topic value used to filter out some of parameters and subcommands
+
+-- _generate_help_message_buffer makes a table of strings containing help message
+-- of current command.
 ---@param buffer? string[]
----@param show_all? boolean # When `true` is passed all hidden parameters and subcommands will be shown.
+---@param args? argparse.CommandHelpArgs
 ---@return string[]
-function Command:_to_string(buffer, show_all)
+function Command:_generate_help_message_buffer(buffer, args)
     buffer = buffer or {}
-    show_all = show_all or false
 
     self:_append_usage_string(buffer)
-    self:_append_parameter_string(buffer, show_all)
-    self:_append_subcommand_string(buffer, show_all)
+    self:_append_parameter_string(buffer, args)
+    self:_append_subcommand_string(buffer, args)
 
     return buffer
 end
@@ -323,13 +353,16 @@ end
 -- _append_parameter_string adds help message of command's parameter to string
 -- buffer.
 ---@param buffer string[]
----@param show_all boolean # When `true` is passed, hidden parameters will also be shown.
-function Command:_append_parameter_string(buffer, show_all)
+---@param args? argparse.CommandHelpArgs
+function Command:_append_parameter_string(buffer, args)
+    local show_all = args and args.show_all or false
+    local topic = args and args.topic or nil
+
     local positionals = {} ---@type argparse.Parameter[]
     local flags = {} ---@type argparse.Parameter[]
 
     for _, param in ipairs(self._parameters) do
-        if show_all or not param.is_hidden then
+        if (show_all or not param.is_hidden) and param:is_match_topic(topic) then
             if param:is_flag() then
                 table.insert(flags, param)
             else
@@ -396,12 +429,15 @@ end
 
 -- _append_subcommand_string adds help message of subcommands to string buffer.
 ---@param buffer string[]
----@param show_all boolean # When `true` is passed, hidden subcommands will also be shown.
-function Command:_append_subcommand_string(buffer, show_all)
+---@param args? argparse.CommandHelpArgs
+function Command:_append_subcommand_string(buffer, args)
+    local show_all = args and args.show_all or false
+    local topic = args and args.topic or nil
+
     local commands = {} ---@type argparse.Command[]
 
     for _, cmd in pairs(self._subcommands) do
-        if show_all or not cmd.is_hidden then
+        if (show_all or not cmd.is_hidden) and cmd:is_match_topic(topic) then
             table.insert(commands, cmd)
         end
     end
@@ -422,6 +458,34 @@ function Command:_append_subcommand_string(buffer, show_all)
             table.insert(buffer, cmd.name)
         end
     end
+end
+
+-- _make_help_cmd makes a help subcommand for itself.
+---@return argparse.Command
+function Command:_make_help_cmd()
+    return Command:new {
+        name = "help",
+        help = "show help message for command",
+        no_help_cmd = true,
+    }:parameter {
+        { name = "topic",      type = "string",  help = "subtopic used to filter parameters, subcommands" },
+        { long = "show-all",   type = "boolean", help = "includes hidden subcommands and parameters in help message" },
+        { long = "list-topic", type = "boolean", help = "list all available help topics" },
+    }:operation(function(args)
+        if args.list_topic then
+            local list = self:get_topic_list()
+            if #list <= 0 then
+                print("no topic available")
+            else
+                for _, topic in ipairs(list) do
+                    print(topic)
+                end
+            end
+        else
+            local buffer = self:_generate_help_message_buffer(nil, args)
+            print(table.concat(buffer))
+        end
+    end)
 end
 
 -- run_help runs `help` subcommand of current command if it exists.
@@ -484,6 +548,61 @@ end
 function Command:operation(op)
     self._operation = op
     return self
+end
+
+-- is_match_topic check wheather current command belongs given topic.
+---@param topic? string
+---@return boolean
+function Command:is_match_topic(topic)
+    if topic == nil then
+        return true
+    end
+
+    if not self.topics then
+        return false
+    end
+
+    local is_match = false
+    for _, value in ipairs(self.topics) do
+        is_match = value == topic
+        if is_match then
+            break
+        end
+    end
+
+    return is_match
+end
+
+-- get_topic_list returns a list of topics containing all possible topic of current
+-- command.
+---@return string[]
+function Command:get_topic_list()
+    local topic_set = {} ---@type table<string, boolean>
+
+    for _, param in ipairs(self._parameters) do
+        if param.topics then
+            for _, topic in ipairs(param.topics) do
+                topic_set[topic] = true
+            end
+        end
+    end
+
+    for _, cmd in ipairs(self._subcommands) do
+        if cmd.topics then
+            for _, topic in ipairs(cmd.topics) do
+                topic_set[topic] = true
+            end
+        end
+    end
+
+    local topics = {} ---@type string[]
+    for topic in pairs(topic_set) do
+        table.insert(topics, topic)
+    end
+
+    table.sort(topics)
+
+    return topics
 end
 
 -----------------------------------------------------------------------------
