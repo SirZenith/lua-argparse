@@ -63,16 +63,8 @@ function Parameter:__tostring()
     local buffer = {}
 
     self:_append_parameter_name(buffer)
-
-    -- type info
-    table.insert(buffer, ": ")
-    table.insert(buffer, self.type)
-
-    if self.required then
-        table.insert(buffer, ", ")
-        table.insert(buffer, "*required*")
-    end
-
+    self:_append_type_info_string(buffer)
+    self:_append_required_flag_string(buffer)
     self:_append_repeat_cnt_string(buffer)
 
     return table.concat(buffer)
@@ -95,6 +87,27 @@ function Parameter:_append_parameter_name(buffer)
             end
             table.insert(buffer, "--")
             table.insert(buffer, self.long)
+        end
+    end
+end
+
+-- _append_type_info_string adds type information of parameter to buffer.
+---@param buffer string[]
+function Parameter:_append_type_info_string(buffer)
+    table.insert(buffer, ": ")
+    table.insert(buffer, self.type)
+end
+
+-- _append_required_flag_string adds required mark to buffer
+---@param buffer string[]
+function Parameter:_append_required_flag_string(buffer)
+    if not self.short and not self.long then
+        if not self.required then
+            table.insert(buffer, ", optional")
+        end
+    else
+        if self.required then
+            table.insert(buffer, ", *required*")
         end
     end
 end
