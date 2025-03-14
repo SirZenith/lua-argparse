@@ -80,7 +80,7 @@ as entrance of your command tree.
 
 # API
 
-Following documentation describe master branch of this repo. If you whant to read
+Following documentation describes master branch of this repo. If you want to read
 the doc for specific version, please switch to corresponding git tag.
 
 ## `Parameter`
