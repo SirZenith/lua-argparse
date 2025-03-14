@@ -80,6 +80,9 @@ as entrance of your command tree.
 
 # API
 
+Following documentation describe master branch of this repo. If you whant to read
+the doc for specific version, please switch to corresponding git tag.
+
 ## `Parameter`
 
 **Fields**
@@ -103,6 +106,10 @@ as entrance of your command tree.
 
   When this value is set to non-positive, this parameter can be repeated infinite
   many times.
+- `is_hidden`: If set to true, this command will be hidden when `help` command
+  is ran without `--show-all` flag.
+- `topics`: A list of topic this parameter belongs to, useful for filtering help
+  message output.
 
 ---
 
@@ -115,17 +122,43 @@ as entrance of your command tree.
 
   This table must contains at least one of `name` or `long`.
 
+---
+
+**Methods**
+
+- `self:is_flag(): boolean`
+
+  Check if current parameter is a flag.
+- `self:is_match_topic(topic?: string): boolean`
+
+  Check if current parameter belongs to given topic.
+
 ## `Command`
 
-`help` subcommand is added on its creation. Help command also can takes argument,
-passed arguments can be used to index subcommand under current command, and located
-subcommand's help info will get printed instead.
+`help` subcommand is added on its creation.
+
+Help command do takes positional argument and flags.
+
+`--show-all` is a bool flag, indication print out all hidden subcommands and
+parameters too.
+
+`--list-topic` is a bool flag that tells help command to list all available topics
+of current command.
+
+One topic can be specified by positional argument. If given, only parameters and
+subcommands that belongs to given topic will be printed in help mesasge.
 
 **Fields**
 
 - `name`: Command's name, used index in command tree, should be unique among its
   siblings.
 - `help`: Help description for this command.
+- `is_hidden`: If this command should be hidden when `help` command is run without
+  `--show-all` flag.
+- `topics`: A list of topic this command belongs to. Userful for filtering help
+  message output.
+- `no_helper_cmd`: Only used during construction, when set to true, no help subcommand
+  will be created for this command.,
 
 ---
 
@@ -161,6 +194,12 @@ subcommand's help info will get printed instead.
 
   When command gets executed, parsed argument table will be passed to this function
   as argument.
+- `self:is_match_topic(topic?: string): boolean`
+
+  Check if current command belongs given topic.
+- `self:get_topic_list(): stirng[]`
+
+  Returns a list of all available topics under this command.
 
 ## `ArgParser`
 
