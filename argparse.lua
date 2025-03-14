@@ -400,7 +400,7 @@ end
 function Command:_append_subcommand_string(buffer, show_all)
     local commands = {} ---@type argparse.Command[]
 
-    for _, cmd in ipairs(self._subcommands) do
+    for _, cmd in pairs(self._subcommands) do
         if show_all or not cmd.is_hidden then
             table.insert(commands, cmd)
         end
@@ -414,7 +414,6 @@ function Command:_append_subcommand_string(buffer, show_all)
         table.insert(buffer, "\n")
         table.insert(buffer, "\n")
         table.insert(buffer, "Subcommands:")
-        table.insert(buffer, "\n")
 
         for _, cmd in ipairs(self._subcommand_list) do
             table.insert(buffer, "\n")
