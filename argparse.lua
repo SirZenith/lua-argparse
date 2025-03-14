@@ -60,31 +60,48 @@ Parameter.__index = Parameter
 
 ---@return string
 function Parameter:__tostring()
-    local buffer = { self.name }
+    local buffer = {}
 
-    if not self.required then
-        table.insert(buffer, "?")
-    end
+    self:_append_parameter_name(buffer)
 
-    if self.short then
-        table.insert(buffer, " (-")
-        table.insert(buffer, self.short)
-    end
-    if self.long and not self.short then
-        table.insert(buffer, " (--")
-        table.insert(buffer, self.long)
-        table.insert(buffer, ")")
-    elseif self.long then
-        table.insert(buffer, ", --")
-        table.insert(buffer, self.long)
-        table.insert(buffer, ")")
-    elseif self.short then
-        table.insert(buffer, ")")
-    end
-
+    -- type info
     table.insert(buffer, ": ")
     table.insert(buffer, self.type)
 
+    if self.required then
+        table.insert(buffer, ", ")
+        table.insert(buffer, "*required*")
+    end
+
+    self:_append_repeat_cnt_string(buffer)
+
+    return table.concat(buffer)
+end
+
+-- _append_parameter_name adds parameter display name string to buffer.
+---@param buffer string[]
+function Parameter:_append_parameter_name(buffer)
+    if not self.short and not self.long then
+        table.insert(buffer, self.name)
+    else
+        if self.short then
+            table.insert(buffer, "-")
+            table.insert(buffer, self.short)
+        end
+
+        if self.long then
+            if self.short then
+                table.insert(buffer, ", ")
+            end
+            table.insert(buffer, "--")
+            table.insert(buffer, self.long)
+        end
+    end
+end
+
+-- _append_repeat_cnt_string appending max repeat cnt infomation to buffer.
+---@param buffer string[]
+function Parameter:_append_repeat_cnt_string(buffer)
     if self.max_cnt == 1 then
         -- pass
     elseif self.max_cnt > 1 then
@@ -96,8 +113,6 @@ function Parameter:__tostring()
         table.insert(buffer, ", ")
         table.insert(buffer, "max_repeat(Inf)")
     end
-
-    return table.concat(buffer)
 end
 
 -- new creates a new parameter with given config meta.
@@ -151,8 +166,7 @@ end
 ---@field _operation fun(args: table<string, any>) # Operation bind to the command, take target command object as input.
 local Command = {}
 Command.__index = Command
-Command._indent = "    "
-Command._indent_secondary = "  "
+Command._indent = "  "
 
 -- Find target command using argument list, returning command found and arguments
 -- left in the list. panic if not command is current binding to ArgParser.
@@ -234,16 +248,12 @@ function Command:__tostring()
 end
 
 ---@param buffer? string[]
----@param indent? string
+---@param show_all? boolean # When `true` is passed all hidden parameters and subcommands will be shown.
 ---@return string[]
-function Command:_to_string(buffer, indent)
+function Command:_to_string(buffer, show_all)
     buffer = buffer or {}
-    indent = indent or ""
+    show_all = show_all or false
 
-    table.insert(buffer, indent)
-    -- if indent ~= "" then
-    table.insert(buffer, "* ")
-    -- end
     table.insert(buffer, self.name)
 
     -- title line
@@ -269,16 +279,14 @@ function Command:_to_string(buffer, indent)
     if self.help then
         table.insert(buffer, "\n")
 
-        table.insert(buffer, indent)
-        table.insert(buffer, Command._indent_secondary)
         table.insert(buffer, "|=> ")
         table.insert(buffer, self.help)
     end
 
     -- parameters
-    self:_append_parameter_string(buffer, indent)
+    self:_append_parameter_string(buffer, show_all)
     -- subcommands
-    self:_append_subcommand_string(buffer, indent)
+    self:_append_subcommand_string(buffer, show_all)
 
     return buffer
 end
@@ -286,9 +294,8 @@ end
 -- _append_parameter_string adds help message of command's parameter to string
 -- buffer.
 ---@param buffer string[]
----@param indent string
 ---@param show_all boolean # When `true` is passed, hidden parameters will also be shown.
-function Command:_append_parameter_string(buffer, indent, show_all)
+function Command:_append_parameter_string(buffer, show_all)
     if not show_all then
         local has_non_hidden = false
         for _, param in ipairs(self._parameters) do
@@ -305,23 +312,18 @@ function Command:_append_parameter_string(buffer, indent, show_all)
 
     table.insert(buffer, "\n")
     table.insert(buffer, "\n")
-    table.insert(buffer, indent .. Command._indent_secondary .. "|-- Parameters")
+    table.insert(buffer, "Parameters:")
+    table.insert(buffer, "\n")
 
     for _, param in ipairs(self._parameters) do
         if show_all or not param.is_hidden then
             table.insert(buffer, "\n")
 
-            table.insert(buffer, indent)
             table.insert(buffer, Command._indent)
-            table.insert(buffer, "- ")
             table.insert(buffer, tostring(param))
 
             if param.help and #param.help ~= 0 then
-                table.insert(buffer, "\n")
-                table.insert(buffer, indent)
-                table.insert(buffer, Command._indent)
-                table.insert(buffer, Command._indent_secondary)
-                table.insert(buffer, "|> ")
+                table.insert(buffer, " |> ")
                 table.insert(buffer, param.help)
             end
         end
@@ -330,9 +332,8 @@ end
 
 -- _append_subcommand_string adds help message of subcommands to string buffer.
 ---@param buffer string[]
----@param indent string
 ---@param show_all boolean # When `true` is passed, hidden subcommands will also be shown.
-function Command:_append_subcommand_string(buffer, indent, show_all)
+function Command:_append_subcommand_string(buffer, show_all)
     if not show_all then
         local has_non_hidden = false
         for _, cmd in ipairs(self._subcommand_list) do
@@ -349,12 +350,12 @@ function Command:_append_subcommand_string(buffer, indent, show_all)
 
     table.insert(buffer, "\n")
     table.insert(buffer, "\n")
-    table.insert(buffer, indent .. Command._indent_secondary .. "|-- Subcommands")
+    table.insert(buffer, "Subcommands:")
+    table.insert(buffer, "\n")
 
     for _, cmd in ipairs(self._subcommand_list) do
         if show_all or not cmd.is_hidden then
             table.insert(buffer, "\n")
-            table.insert(buffer, indent)
             table.insert(buffer, Command._indent)
             table.insert(buffer, "* ")
             table.insert(buffer, cmd.name)
