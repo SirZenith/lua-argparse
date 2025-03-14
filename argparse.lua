@@ -50,6 +50,7 @@ end
 ---@field help? string # Help info for the parameter.
 ---@field default? any # Default value for the parameter.
 ---@field max_cnt? integer # Max repeat number of this parameter. Default to 1, non-positive value means infinite.
+---@field is_hidden? boolean # If this parameter should be hidden in command's help message
 
 ---@class argparse.Parameter: argparse.ParameterCfg # Meta info about parameter of a command
 ---@field name string
@@ -129,6 +130,7 @@ function Parameter:new(config)
     this.help = config["help"] or nil
 
     this.max_cnt = type(config.max_cnt) == "number" and config.max_cnt or 1
+    this.is_hidden = config.is_hidden
 
     return this
 end
@@ -138,6 +140,7 @@ end
 ---@class argparse.CommandCfg # A table of data used to create a new command.
 ---@field name string
 ---@field help? string
+---@field is_hidden? boolean # If this command should be hidden in help message
 
 ---@class argparse.Command: argparse.CommandCfg
 ---@field _subcommand_list argparse.Command[] # Array storing subcommands. To preserve adding order of subcommands.
@@ -174,14 +177,17 @@ local function direct_to_cmd(cmd, arg_in)
 end
 
 -- new creates a new command with given meta config.
----@param config table<string, string>
+---@param config argparse.CommandCfg
 ---@return argparse.Command
 function Command:new(config)
     local this = setmetatable({}, self)
 
-    this.name = config["name"]
-    this.help = config["help"]
+    this.name = config.name
     assert(this.name, "name must be provided for a command")
+
+    this.help = config.help
+    this.is_hidden = config.is_hidden
+
     this._subcommand_list = {}
     this._subcommands = {}
     this._parameters = {}
@@ -270,12 +276,39 @@ function Command:_to_string(buffer, indent)
     end
 
     -- parameters
-    if #self._parameters > 0 then
-        table.insert(buffer, "\n")
-        table.insert(buffer, "\n")
-        table.insert(buffer, indent .. Command._indent_secondary .. "|-- Parameters")
+    self:_append_parameter_string(buffer, indent)
+    -- subcommands
+    self:_append_subcommand_string(buffer, indent)
 
+    return buffer
+end
+
+-- _append_parameter_string adds help message of command's parameter to string
+-- buffer.
+---@param buffer string[]
+---@param indent string
+---@param show_all boolean # When `true` is passed, hidden parameters will also be shown.
+function Command:_append_parameter_string(buffer, indent, show_all)
+    if not show_all then
+        local has_non_hidden = false
         for _, param in ipairs(self._parameters) do
+            if not param.is_hidden then
+                has_non_hidden = true
+                break
+            end
+        end
+
+        if not has_non_hidden then
+            return
+        end
+    end
+
+    table.insert(buffer, "\n")
+    table.insert(buffer, "\n")
+    table.insert(buffer, indent .. Command._indent_secondary .. "|-- Parameters")
+
+    for _, param in ipairs(self._parameters) do
+        if show_all or not param.is_hidden then
             table.insert(buffer, "\n")
 
             table.insert(buffer, indent)
@@ -293,24 +326,40 @@ function Command:_to_string(buffer, indent)
             end
         end
     end
+end
 
-    -- subcommands
-    if not is_empty(self._subcommands) then
-        table.insert(buffer, "\n")
-        table.insert(buffer, "\n")
-        table.insert(buffer, indent .. Command._indent_secondary .. "|-- Subcommands")
-
+-- _append_subcommand_string adds help message of subcommands to string buffer.
+---@param buffer string[]
+---@param indent string
+---@param show_all boolean # When `true` is passed, hidden subcommands will also be shown.
+function Command:_append_subcommand_string(buffer, indent, show_all)
+    if not show_all then
+        local has_non_hidden = false
         for _, cmd in ipairs(self._subcommand_list) do
+            if not cmd.is_hidden then
+                has_non_hidden = true
+                break
+            end
+        end
+
+        if not has_non_hidden then
+            return
+        end
+    end
+
+    table.insert(buffer, "\n")
+    table.insert(buffer, "\n")
+    table.insert(buffer, indent .. Command._indent_secondary .. "|-- Subcommands")
+
+    for _, cmd in ipairs(self._subcommand_list) do
+        if show_all or not cmd.is_hidden then
             table.insert(buffer, "\n")
-            -- cmd:_to_string(buffer, indent .. Command._indent)
             table.insert(buffer, indent)
             table.insert(buffer, Command._indent)
             table.insert(buffer, "* ")
             table.insert(buffer, cmd.name)
         end
     end
-
-    return buffer
 end
 
 -- run_help runs `help` subcommand of current command if it exists.
