@@ -886,7 +886,7 @@ do
         end
 
         if not cmd._operation then
-            self:run_help()
+            cmd:run_help()
         else
             cmd._operation(args)
         end
