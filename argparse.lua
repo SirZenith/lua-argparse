@@ -63,9 +63,14 @@ function Parameter:__tostring()
     local buffer = {}
 
     self:_append_parameter_name(buffer)
+    table.insert(buffer, ": ")
     self:_append_type_info_string(buffer)
+    table.insert(buffer, ", ")
     self:_append_required_flag_string(buffer)
-    self:_append_repeat_cnt_string(buffer)
+    if self.max_cnt ~= 1 then
+        table.insert(buffer, ", ")
+        self:_append_repeat_cnt_string(buffer)
+    end
 
     return table.concat(buffer)
 end
@@ -73,9 +78,7 @@ end
 -- _append_parameter_name adds parameter display name string to buffer.
 ---@param buffer string[]
 function Parameter:_append_parameter_name(buffer)
-    if not self.short and not self.long then
-        table.insert(buffer, self.name)
-    else
+    if self:is_flag() then
         if self.short then
             table.insert(buffer, "-")
             table.insert(buffer, self.short)
@@ -88,26 +91,27 @@ function Parameter:_append_parameter_name(buffer)
             table.insert(buffer, "--")
             table.insert(buffer, self.long)
         end
+    else
+        table.insert(buffer, self.name)
     end
 end
 
 -- _append_type_info_string adds type information of parameter to buffer.
 ---@param buffer string[]
 function Parameter:_append_type_info_string(buffer)
-    table.insert(buffer, ": ")
     table.insert(buffer, self.type)
 end
 
 -- _append_required_flag_string adds required mark to buffer
 ---@param buffer string[]
 function Parameter:_append_required_flag_string(buffer)
-    if not self.short and not self.long then
-        if not self.required then
-            table.insert(buffer, ", optional")
+    if self:is_flag() then
+        if self.required then
+            table.insert(buffer, "required")
         end
     else
-        if self.required then
-            table.insert(buffer, ", *required*")
+        if not self.required then
+            table.insert(buffer, "optional")
         end
     end
 end
@@ -118,12 +122,10 @@ function Parameter:_append_repeat_cnt_string(buffer)
     if self.max_cnt == 1 then
         -- pass
     elseif self.max_cnt > 1 then
-        table.insert(buffer, ", ")
         table.insert(buffer, "max_repeat(")
         table.insert(buffer, tostring(self.max_cnt))
         table.insert(buffer, ")")
     else
-        table.insert(buffer, ", ")
         table.insert(buffer, "max_repeat(Inf)")
     end
 end
@@ -161,6 +163,11 @@ function Parameter:new(config)
     this.is_hidden = config.is_hidden
 
     return this
+end
+
+---@return boolean # If this parameter is a flag.
+function Parameter:is_flag()
+    return self.short ~= nil or self.long ~= nil
 end
 
 -----------------------------------------------------------------------------
@@ -251,12 +258,6 @@ end
 ---@return string
 function Command:__tostring()
     local buffer = self:_to_string()
-    local cnt = 0
-    for _, s in ipairs(buffer) do
-        if s == "\n" then
-            cnt = cnt + 1
-        end
-    end
     return table.concat(buffer)
 end
 
@@ -267,14 +268,23 @@ function Command:_to_string(buffer, show_all)
     buffer = buffer or {}
     show_all = show_all or false
 
+    self:_append_usage_string(buffer)
+    self:_append_parameter_string(buffer, show_all)
+    self:_append_subcommand_string(buffer, show_all)
+
+    return buffer
+end
+
+-- _append_usage_string adds command usage and description text to buffer.
+---@param buffer string[]
+function Command:_append_usage_string(buffer)
+    table.insert(buffer, "Usage:\n")
+    table.insert(buffer, Command._indent)
     table.insert(buffer, self.name)
 
     -- title line
-    if not is_empty(self._subcommands) then
-        table.insert(buffer, " [Subcommand]")
-    end
     if not is_empty(self._flags) then
-        table.insert(buffer, " [Options]")
+        table.insert(buffer, " {flags}")
     end
     if not is_empty(self._positionals) then
         table.insert(buffer, " ")
@@ -284,24 +294,30 @@ function Command:_to_string(buffer, show_all)
                 table.insert(buffer, " ")
             end
 
-            table.insert(buffer, string.format("<%s>", param.name))
+            local max_cnt = param.max_cnt
+            if max_cnt >= 1 then
+                for _ = 1, max_cnt do
+                    table.insert(buffer, "<")
+                    table.insert(buffer, param.name)
+                    table.insert(buffer, ">")
+                end
+            else
+                table.insert(buffer, "...(")
+                table.insert(buffer, param.name)
+                table.insert(buffer, ")")
+            end
         end
     end
 
     -- help info
     if self.help then
         table.insert(buffer, "\n")
+        table.insert(buffer, "\n")
 
-        table.insert(buffer, "|=> ")
+        table.insert(buffer, "Description:\n")
+        table.insert(buffer, Command._indent)
         table.insert(buffer, self.help)
     end
-
-    -- parameters
-    self:_append_parameter_string(buffer, show_all)
-    -- subcommands
-    self:_append_subcommand_string(buffer, show_all)
-
-    return buffer
 end
 
 -- _append_parameter_string adds help message of command's parameter to string
@@ -309,37 +325,72 @@ end
 ---@param buffer string[]
 ---@param show_all boolean # When `true` is passed, hidden parameters will also be shown.
 function Command:_append_parameter_string(buffer, show_all)
-    if not show_all then
-        local has_non_hidden = false
-        for _, param in ipairs(self._parameters) do
-            if not param.is_hidden then
-                has_non_hidden = true
-                break
-            end
-        end
-
-        if not has_non_hidden then
-            return
-        end
-    end
-
-    table.insert(buffer, "\n")
-    table.insert(buffer, "\n")
-    table.insert(buffer, "Parameters:")
-    table.insert(buffer, "\n")
+    local positionals = {} ---@type argparse.Parameter[]
+    local flags = {} ---@type argparse.Parameter[]
 
     for _, param in ipairs(self._parameters) do
         if show_all or not param.is_hidden then
-            table.insert(buffer, "\n")
-
-            table.insert(buffer, Command._indent)
-            table.insert(buffer, tostring(param))
-
-            if param.help and #param.help ~= 0 then
-                table.insert(buffer, " |> ")
-                table.insert(buffer, param.help)
+            if param:is_flag() then
+                table.insert(flags, param)
+            else
+                table.insert(positionals, param)
             end
         end
+    end
+
+    if #positionals > 0 then
+        table.insert(buffer, "\n")
+        table.insert(buffer, "\n")
+        table.insert(buffer, "Positional:")
+
+        for _, param in ipairs(positionals) do
+            table.insert(buffer, "\n")
+            self:_append_single_parameter_string(buffer, param)
+        end
+    end
+
+    if #flags > 0 then
+        table.sort(flags, function(param_a, param_b)
+            local a_name = param_a.short or param_a.long
+            local b_name = param_b.short or param_b.long
+            return a_name < b_name
+        end)
+
+        table.insert(buffer, "\n")
+        table.insert(buffer, "\n")
+        table.insert(buffer, "Flag:")
+
+        for _, param in ipairs(flags) do
+            table.insert(buffer, "\n")
+            self:_append_single_parameter_string(buffer, param)
+        end
+    end
+end
+
+-- _append_single_parameter_string adds description text of given parameter to
+-- buffer.
+---@param buffer string[]
+---@param param argparse.Parameter
+function Command:_append_single_parameter_string(buffer, param)
+    table.insert(buffer, Command._indent)
+    param:_append_parameter_name(buffer)
+    table.insert(buffer, "\n")
+
+    table.insert(buffer, Command._indent)
+    table.insert(buffer, "  * ")
+    param:_append_type_info_string(buffer)
+    table.insert(buffer, ", ")
+    param:_append_required_flag_string(buffer)
+    if param.max_cnt ~= 1 then
+        table.insert(buffer, ", ")
+        param:_append_repeat_cnt_string(buffer)
+    end
+
+    if param.help and #param.help ~= 0 then
+        table.insert(buffer, "\n")
+        table.insert(buffer, Command._indent)
+        table.insert(buffer, "  * ")
+        table.insert(buffer, param.help)
     end
 end
 
@@ -347,27 +398,25 @@ end
 ---@param buffer string[]
 ---@param show_all boolean # When `true` is passed, hidden subcommands will also be shown.
 function Command:_append_subcommand_string(buffer, show_all)
-    if not show_all then
-        local has_non_hidden = false
-        for _, cmd in ipairs(self._subcommand_list) do
-            if not cmd.is_hidden then
-                has_non_hidden = true
-                break
-            end
-        end
+    local commands = {} ---@type argparse.Command[]
 
-        if not has_non_hidden then
-            return
+    for _, cmd in ipairs(self._subcommands) do
+        if show_all or not cmd.is_hidden then
+            table.insert(commands, cmd)
         end
     end
 
-    table.insert(buffer, "\n")
-    table.insert(buffer, "\n")
-    table.insert(buffer, "Subcommands:")
-    table.insert(buffer, "\n")
+    if #commands > 0 then
+        table.sort(commands, function(cmd_a, cmd_b)
+            return cmd_a.name < cmd_b.name
+        end)
 
-    for _, cmd in ipairs(self._subcommand_list) do
-        if show_all or not cmd.is_hidden then
+        table.insert(buffer, "\n")
+        table.insert(buffer, "\n")
+        table.insert(buffer, "Subcommands:")
+        table.insert(buffer, "\n")
+
+        for _, cmd in ipairs(self._subcommand_list) do
             table.insert(buffer, "\n")
             table.insert(buffer, Command._indent)
             table.insert(buffer, "* ")
