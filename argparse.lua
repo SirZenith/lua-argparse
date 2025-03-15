@@ -153,10 +153,12 @@ function Parameter:new(config)
     this.short = config["short"] or nil
     this.name = config["name"] or (this.long and this.long:gsub("-", "_") or "")
     assert(this.name, "parameter must have a name or long flag name.")
-    assert(
-        this.short == nil or #this.short == 1,
-        string.format("short flag for parameter '%s' has more than one letter (-%s)", this.name, this.short)
-    )
+    if this.short then
+        assert(
+            #this.short == 1,
+            string.format("short flag for parameter '%s' has more than one letter (-%s)", this.name, this.short)
+        )
+    end
 
     this.required = config["required"] or false
     this.type = config["type"] or "string"
