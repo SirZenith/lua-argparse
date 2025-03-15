@@ -66,6 +66,11 @@ function Parameter:__tostring()
     self:_append_parameter_name(buffer)
     table.insert(buffer, ": ")
     self:_append_type_info_string(buffer)
+    if self.default ~= nil then
+        table.insert(buffer, " (default: ")
+        self:_append_default_value_string(buffer)
+        table.insert(buffer, ")")
+    end
     table.insert(buffer, ", ")
     self:_append_required_flag_string(buffer)
     if self.max_cnt ~= 1 then
@@ -95,6 +100,13 @@ function Parameter:_append_parameter_name(buffer)
     else
         table.insert(buffer, self.name)
     end
+end
+
+-- _append_default_value_string adds string reresentation of parameter's default
+-- value to buffer.
+---@param buffer string[]
+function Parameter:_append_default_value_string(buffer)
+    table.insert(buffer, tostring(self.default))
 end
 
 -- _append_type_info_string adds type information of parameter to buffer.
@@ -412,6 +424,11 @@ function Command:_append_single_parameter_string(buffer, param)
     table.insert(buffer, Command._indent)
     table.insert(buffer, "  * ")
     param:_append_type_info_string(buffer)
+    if param.default ~= nil then
+        table.insert(buffer, " (default: ")
+        param:_append_default_value_string(buffer)
+        table.insert(buffer, ")")
+    end
     table.insert(buffer, ", ")
     param:_append_required_flag_string(buffer)
     if param.max_cnt ~= 1 then
