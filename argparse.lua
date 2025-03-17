@@ -519,6 +519,10 @@ function Command:_append_subcommand_string(buffer, args)
             table.insert(buffer, Command._indent)
             table.insert(buffer, "* ")
             table.insert(buffer, cmd.name)
+            if cmd.help then
+                table.insert(buffer, ": ")
+                table.insert(buffer, cmd.help)
+            end
         end
     end
 end
