@@ -106,8 +106,10 @@ the doc for specific version, please switch to corresponding git tag.
 
   When this value is set to non-positive, this parameter can be repeated infinite
   many times.
-- `is_hidden`: If set to true, this command will be hidden when `help` command
+- `is_hidden`: If set to true, this parameter will be hidden when `help` command
   is ran without `--show-all` flag.
+- `is_internal`: If set to true, this parameter won't be printed in `help` command
+  event with `--show-all` flag.
 - `topics`: A list of topic this parameter belongs to, useful for filtering help
   message output.
 
@@ -148,6 +150,11 @@ of current command.
 One topic can be specified by positional argument. If given, only parameters and
 subcommands that belongs to given topic will be printed in help mesasge.
 
+And all commands has following two flags: `--shell-completion-flags`,
+`--shell-completion-subcommands`. These flags can be useful when generating or
+defining shell completion. They can list all available non-internal flags and
+subcommands respectively.
+
 **Fields**
 
 - `name`: Command's name, used index in command tree, should be unique among its
@@ -155,6 +162,8 @@ subcommands that belongs to given topic will be printed in help mesasge.
 - `help`: Help description for this command.
 - `is_hidden`: If this command should be hidden when `help` command is run without
   `--show-all` flag.
+- `is_internal`: If set to true, this command won't be printed in `help` command
+  event with `--show-all` flag.
 - `topics`: A list of topic this command belongs to. Userful for filtering help
   message output.
 - `no_helper_cmd`: Only used during construction, when set to true, no help subcommand
