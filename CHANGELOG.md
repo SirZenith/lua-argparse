@@ -1,3 +1,24 @@
+# 0.2.2
+
+## Feature
+
+- Parameters and subcommands has a `is_internal` mark now. When set ture, that
+  parameter or command won't be printed in help message event with `--show-all`
+  flag.
+- flag `--hell-completion-flags` and `--shell-completion-subcommands` are added
+  to command on construction. Those flags prints shell completion message for
+  current command.
+
+## Fix
+
+- Fix compatibility bug in short flag name assertion for Lua 5.1.
+
+## Breaking
+
+- Underscore field `_subcommand_list` now been removed from `Application`.
+- `parse_arg` method of `ArgParser` now returns a list of error message instead
+  just one string.
+
 # 0.2.1
 
 ## Feature
