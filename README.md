@@ -60,6 +60,22 @@ hello, world
 hello, world
 ```
 
+If you are to write some completion script for you shell, check out `--shell-completion-flags`
+and `--shell-completion-subcommands` flags. When provided, all positional arguments
+and other flags are ignored, instead of running command action, command prints
+completion information of itself to stdout.
+
+```shell
+lua example.lua what ever value --shell-completion-subcommands
+```
+
+Output:
+
+```
+help:show help message for command
+say:sample subcommand
+```
+
 # Overview
 
 This script provide type `Parameter`, `Command`, `ArgParser`, `Application`.

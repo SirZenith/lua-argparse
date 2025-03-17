@@ -5,7 +5,7 @@
 - Parameters and subcommands has a `is_internal` mark now. When set ture, that
   parameter or command won't be printed in help message event with `--show-all`
   flag.
-- flag `--hell-completion-flags` and `--shell-completion-subcommands` are added
+- flag `--shell-completion-flags` and `--shell-completion-subcommands` are added
   to command on construction. Those flags prints shell completion message for
   current command.
 
