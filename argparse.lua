@@ -38,6 +38,39 @@ local function is_empty(tab)
     return check
 end
 
+-- try_append_list appends element to a table.
+-- If passed table value is nil, then a new list will be created.
+-- If passed element vlaue is nil, this function returns passed `list` value right away.
+---@generic T
+---@param list T[] | nil
+---@param element T | nil
+---@return T[] | nil
+local function try_append_list(list, element)
+    if not element then
+        return nil
+    end
+
+    list = list or {}
+    table.insert(list, element)
+
+    return list
+end
+
+-- print_string_list prints each element in given list target file. If passed list
+-- value is `nil`, `default_msg` will be printed instead.
+---@param file file*
+---@param list string[] | nil
+---@param default_msg? string
+local function print_string_list(file, list, default_msg)
+    if list then
+        for _, err in ipairs(list) do
+            file:write(err, "\n")
+        end
+    elseif default_msg then
+        file:write(default_msg, "\n")
+    end
+end
+
 -----------------------------------------------------------------------------
 -- Parameter for command
 
@@ -51,6 +84,7 @@ end
 ---@field default? any # Default value for the parameter.
 ---@field max_cnt? integer # Max repeat number of this parameter. Default to 1, non-positive value means infinite.
 ---@field is_hidden? boolean # If this parameter should be hidden in command's help message.
+---@field is_internal? boolean # Indicating this parameter should not be shown to user in help message no matter what.
 ---@field topics? string[] # A list of topics this parameter belongs to.
 
 ---@class argparse.Parameter: argparse.ParameterCfg # Meta info about parameter of a command
@@ -176,6 +210,7 @@ function Parameter:new(config)
 
     this.max_cnt = type(config.max_cnt) == "number" and config.max_cnt or 1
     this.is_hidden = config.is_hidden
+    this.is_internal = config.is_internal
 
     if config.topics then
         local topics = {}
@@ -218,15 +253,21 @@ end
 
 -----------------------------------------------------------------------------
 
+local FLAG_SHELL_COMPLETION_FLAGS = "shell-completion-flags"
+local FLAG_SHELL_COMPLETION_SUBCOMMANDS = "shell-completion-subcommands"
+
+local PARAM_NAME_SHELL_COMPLETION_FLAGS = FLAG_SHELL_COMPLETION_FLAGS:gsub("-", "_")
+local PARAM_NAME_SHELL_COMPLETION_SUBCOMMANDS = FLAG_SHELL_COMPLETION_SUBCOMMANDS:gsub("-", "_")
+
 ---@class argparse.CommandCfg # A table of data used to create a new command.
 ---@field name string
 ---@field help? string
 ---@field is_hidden? boolean # If this command should be hidden in help message.
+---@field is_internal? boolean # Indicating this command should no be shown to user in help message no matter what.
 ---@field topics? string[] # A list of topics this command belongs to.
 ---@field no_help_cmd? boolean # Do not create help command when construct new command.
 
 ---@class argparse.Command: argparse.CommandCfg
----@field _subcommand_list argparse.Command[] # Array storing subcommands. To preserve adding order of subcommands.
 ---@field _subcommands table<string, argparse.Command> # A table that map subcommand name to Command object.
 ---@field _parameters argparse.Parameter[] # List for all Parameters
 ---@field _flags table<string, argparse.Parameter> # A table that map flags to Parameter object.
@@ -244,9 +285,6 @@ Command._indent = "  "
 ---@return string[] argListSlice
 local function direct_to_cmd(cmd, arg_in)
     local index = 1
-    if not cmd then
-        error("no valid command is passed to ArgParser", 1)
-    end
 
     while arg_in[index] do
         local name = arg_in[index]
@@ -278,7 +316,6 @@ function Command:new(config)
         this.topics = topics
     end
 
-    this._subcommand_list = {}
     this._subcommands = {}
     this._parameters = {}
     this._flags = {}
@@ -290,6 +327,11 @@ function Command:new(config)
             this:_make_help_cmd()
         }
     end
+
+    this:parameter {
+        { long = FLAG_SHELL_COMPLETION_FLAGS,       type = "boolean", is_internal = true, help = "generate completion for flags" },
+        { long = FLAG_SHELL_COMPLETION_SUBCOMMANDS, type = "boolean", is_internal = true, help = "generate completion for subcommands" }
+    }
 
     return this
 end
@@ -376,7 +418,8 @@ function Command:_append_parameter_string(buffer, args)
     local flags = {} ---@type argparse.Parameter[]
 
     for _, param in ipairs(self._parameters) do
-        if (show_all or not param.is_hidden) and param:is_match_topic(topic) then
+        local is_visible = not param.is_internal and (show_all or not param.is_hidden)
+        if is_visible and param:is_match_topic(topic) then
             if param:is_flag() then
                 table.insert(flags, param)
             else
@@ -456,7 +499,8 @@ function Command:_append_subcommand_string(buffer, args)
     local commands = {} ---@type argparse.Command[]
 
     for _, cmd in pairs(self._subcommands) do
-        if (show_all or not cmd.is_hidden) and cmd:is_match_topic(topic) then
+        local is_visible = not cmd.is_internal and (show_all or not cmd.is_hidden)
+        if is_visible and cmd:is_match_topic(topic) then
             table.insert(commands, cmd)
         end
     end
@@ -470,7 +514,7 @@ function Command:_append_subcommand_string(buffer, args)
         table.insert(buffer, "\n")
         table.insert(buffer, "Subcommands:")
 
-        for _, cmd in ipairs(self._subcommand_list) do
+        for _, cmd in ipairs(commands) do
             table.insert(buffer, "\n")
             table.insert(buffer, Command._indent)
             table.insert(buffer, "* ")
@@ -532,7 +576,6 @@ do
     function Command:subcommand(commands)
         for _, cmd in ipairs(commands) do
             try_add_to_map(self._subcommands, "Command", cmd.name, cmd)
-            table.insert(self._subcommand_list, cmd)
         end
         return self
     end
@@ -624,6 +667,46 @@ function Command:get_topic_list()
     return topics
 end
 
+-- subcommand_completion returns a list of all non-internal subcommands, including hidden
+-- ones. Useful for generating shell completion.
+-- Note that returned list is not sorted in any way.
+---@return string[]
+function Command:gen_completion_for_subcommands()
+    local result = {}
+
+    for _, cmd in pairs(self._subcommands) do
+        if not cmd.is_internal then
+            table.insert(result, ("%s:%s"):format(cmd.name, cmd.help or ""))
+        end
+    end
+
+    return result
+end
+
+-- flag_completion returns a list of all non-internal flags, including hidden ones.
+-- Useful for generating shell completion.
+-- Note that returned list is not sorted in any way.
+---@return string[]
+function Command:gen_completion_for_flags()
+    local result = {}
+
+    for _, param in pairs(self._parameters) do
+        if not param.is_internal then
+            local help = param.help or ""
+
+            if param.short then
+                table.insert(result, ("%s:%s"):format("-" .. param.short, help))
+            end
+
+            if param.long then
+                table.insert(result, ("%s:%s"):format("--" .. param.long, help))
+            end
+        end
+    end
+
+    return result
+end
+
 -----------------------------------------------------------------------------
 
 ---@class argparse.ArgParser
@@ -647,57 +730,51 @@ end
 do
     -- Fill all default values into command args map
     ---@param cmd argparse.Command
+    ---@return table<string, any>
     local function setup_default_value(cmd)
         local arg_out = {}
-        local stack = { cmd }
-        while #stack ~= 0 do
-            local size = #stack
-            cmd = stack[size]
-            stack[size] = nil
 
-            for _, subcmd in pairs(cmd._subcommands) do
-                table.insert(stack, subcmd)
-            end
+        for _, flag in pairs(cmd._flags) do
+            local name = flag.name
 
-            for _, flag in pairs(cmd._flags) do
-                local name = flag.name
-
-                if flag.max_cnt and flag.max_cnt ~= 1 then
-                    arg_out[name] = {}
-                else
-                    arg_out[name] = flag.default
-                end
-            end
-
-            for _, pos in ipairs(cmd._positionals) do
-                local name = pos.name
-
-                if pos.max_cnt and pos.max_cnt ~= 1 then
-                    arg_out[name] = {}
-                else
-                    arg_out[name] = pos.default
-                end
+            if flag.max_cnt and flag.max_cnt ~= 1 then
+                arg_out[name] = {}
+            else
+                arg_out[name] = flag.default
             end
         end
+
+        for _, pos in ipairs(cmd._positionals) do
+            local name = pos.name
+
+            if pos.max_cnt and pos.max_cnt ~= 1 then
+                arg_out[name] = {}
+            else
+                arg_out[name] = pos.default
+            end
+        end
+
         return arg_out
     end
 
-    -- Store a flag value to arg map, panic when failed
+    -- store_flag adds a flag value to arg map.
     ---@param args table<string, any>
     ---@param cmd argparse.Command
     ---@param flag string
     ---@param value any
+    ---@return string? err
     local function store_flag(args, cmd, flag, value)
         local param = cmd._flags[flag]
         if not param then
-            error("unexpected flag: " .. flag, 0)
+            return "unexpected flag: " .. flag
         end
 
         local ok, converted = param._converter(value)
         if not ok then
-            local msg = ("failed to convert '%s' to type %s for flag '%s'"):format(value, param.name, flag)
-            error(msg, 0)
-        elseif param.max_cnt == 1 then
+            return ("failed to convert '%s' to type %s for flag '%s'"):format(value, param.name, flag)
+        end
+
+        if param.max_cnt == 1 then
             -- single time value
             args[param.name] = converted
         else
@@ -710,8 +787,7 @@ do
             end
 
             if param.max_cnt > 0 and #list >= param.max_cnt then
-                local msg = ("flag %s is passed more times than allowed"):format(flag)
-                error(msg, 0)
+                return ("flag %s is passed more times than allowed"):format(flag)
             end
 
             table.insert(list, converted)
@@ -725,20 +801,22 @@ do
     ---@param args table<string, any>
     ---@param cmd argparse.Command
     ---@param value any
+    ---@return string? err
     local function store_positional(parser, args, cmd, value)
         local param = cmd._positionals[parser._pos_index]
         if not param then
-            error("unexpected positional parameter: " .. value, 0)
+            return "unexpected positional parameter: " .. value
         end
 
         local ok, converted = param._converter(value)
         if not ok then
-            local msg = string.format(
+            return string.format(
                 "failed to convert '%s' to type '%s' for positional parameter '%s'",
                 value, param.type, param.name
             )
-            error(msg, 0)
-        elseif param.max_cnt == 1 then
+        end
+
+        if param.max_cnt == 1 then
             -- single value argument
             args[param.name] = converted
             parser:_increment_pos_index(param)
@@ -757,6 +835,8 @@ do
                 parser:_increment_pos_index(param)
             end
         end
+
+        return nil
     end
 
     -- Read all command argument into arg map panic when failed
@@ -764,28 +844,39 @@ do
     ---@param arg_out table<string, any>
     ---@param cmd argparse.Command
     ---@param arg_in string[]
+    ---@return string[]? err_list # collected errors happened during reading arguments.
     local function settle_arguments(parser, arg_out, cmd, arg_in)
         local flag = nil
+        local err_list = nil
+
         for _, a in ipairs(arg_in) do
             if a:sub(1, 1) == FLAG_START then
                 -- if encountering a new flag
                 if flag ~= nil then
-                    store_flag(arg_out, cmd, flag, nil)
+                    local err = store_flag(arg_out, cmd, flag, nil)
+                    err_list = try_append_list(err_list, err)
                 end
+
                 flag = a
             elseif flag ~= nil then
                 -- if encounter value paired with previous flag
-                store_flag(arg_out, cmd, flag, a)
+                local err = store_flag(arg_out, cmd, flag, a)
+                err_list = try_append_list(err_list, err)
+
                 flag = nil
             else
                 -- positional argument
-                store_positional(parser, arg_out, cmd, a)
+                local err = store_positional(parser, arg_out, cmd, a)
+                err_list = try_append_list(err_list, err)
             end
         end
 
         if flag ~= nil then
-            store_flag(arg_out, cmd, flag, nil)
+            local err = store_flag(arg_out, cmd, flag, nil)
+            err_list = try_append_list(err_list, err)
         end
+
+        return err_list
     end
 
     -- helper function for required parameter checking
@@ -815,6 +906,7 @@ do
     -- Check whether all required parameters are given, panic if have missing
     ---@param args table<string, any>
     ---@param cmd argparse.Command
+    ---@return string? err
     local function check_all_required(args, cmd)
         local missing = {}
         check_required_paramlist(missing, cmd._flags, args, tostring)
@@ -823,8 +915,10 @@ do
             local indent = "\n    "
             local msg = "following parameter(s) is required, but missing:"
                 .. indent .. table.concat(missing, indent)
-            error(msg, 0)
+            return msg
         end
+
+        return nil
     end
 
     -- parse_arg tries to parse arguments and put results in to Command object
@@ -832,30 +926,27 @@ do
     -- Returns target command specified by arguments and a possible error message.
     ---@param cmd argparse.Command
     ---@param arg_in? string[]
-    ---@return argparse.Command? cmd
-    ---@return table<string, any>? args
-    ---@return string? err
+    ---@return argparse.Command cmd
+    ---@return table<string, any> args
+    ---@return string[]? err_list
     function ArgParser:parse_arg(cmd, arg_in)
         arg_in = arg_in or arg
         self._pos_index = 1
 
-        local ok, result, args = pcall(function()
-            local left_args
-            cmd, left_args = direct_to_cmd(cmd, arg_in)
+        local target, left_args = direct_to_cmd(cmd, arg_in)
 
-            local arg_out = setup_default_value(cmd)
-            settle_arguments(self, arg_out, cmd, left_args)
-
-            check_all_required(arg_out, cmd)
-
-            return cmd, arg_out
-        end)
-
-        if not ok then
-            return nil, nil, result --[[@as string]]
+        local arg_out = setup_default_value(target)
+        local arg_err = settle_arguments(self, arg_out, target, left_args)
+        if arg_err then
+            return target, arg_out, arg_err
         end
 
-        return result, args, nil
+        local requirement_err = check_all_required(arg_out, target)
+        if requirement_err then
+            return target, arg_out, { requirement_err }
+        end
+
+        return target, arg_out, nil
     end
 end
 
@@ -897,10 +988,20 @@ do
     -- run_with_args parses given arguments and run target command's operation.
     ---@param args_in string[] # command arguments
     function Application:run_with_args(args_in)
-        local cmd, args, errmsg = self._arg_parser:parse_arg(self, args_in)
-        if not cmd or not args or errmsg then
-            io.stderr:write(errmsg or "unknown error")
-            io.stderr:write("\n")
+        local cmd, args, err_list = self._arg_parser:parse_arg(self, args_in)
+
+        if args[PARAM_NAME_SHELL_COMPLETION_FLAGS] then
+            local list = cmd:gen_completion_for_flags()
+            table.sort(list)
+            print_string_list(io.stdout, list)
+            return
+        elseif args[PARAM_NAME_SHELL_COMPLETION_SUBCOMMANDS] then
+            local list = cmd:gen_completion_for_subcommands()
+            table.sort(list)
+            print_string_list(io.stdout, list)
+            return
+        elseif err_list then
+            print_string_list(io.stderr, err_list, "Unknown parsing error")
             os.exit(1)
         end
 
