@@ -98,15 +98,22 @@ function Parameter:__tostring()
     local buffer = {}
 
     self:_append_parameter_name(buffer)
+
     table.insert(buffer, ": ")
     self:_append_type_info_string(buffer)
+
     if self.default ~= nil then
         table.insert(buffer, " (default: ")
         self:_append_default_value_string(buffer)
         table.insert(buffer, ")")
     end
-    table.insert(buffer, ", ")
-    self:_append_required_flag_string(buffer)
+
+    local is_flag = self:is_flag()
+    if (is_flag and self.required) or (not is_flag and not self.required) then
+        table.insert(buffer, ", ")
+        self:_append_required_flag_string(buffer)
+    end
+
     if self.max_cnt ~= 1 then
         table.insert(buffer, ", ")
         self:_append_repeat_cnt_string(buffer)
@@ -173,7 +180,7 @@ function Parameter:_append_repeat_cnt_string(buffer)
         table.insert(buffer, tostring(self.max_cnt))
         table.insert(buffer, ")")
     else
-        table.insert(buffer, "max_repeat(Inf)")
+        table.insert(buffer, "max_repeat(Infinite)")
     end
 end
 
@@ -915,10 +922,16 @@ do
         local missing = {}
         check_required_paramlist(missing, cmd._flags, args, tostring)
         check_required_paramlist(missing, cmd._positionals, args, tostring)
-        if #missing ~= 0 then
+
+        local missing_cnt = #missing
+        if missing_cnt > 0 then
             local indent = "\n    "
-            local msg = "following parameter(s) is required, but missing:"
-                .. indent .. table.concat(missing, indent)
+            local msg = ("following %s is required, but missing:%s%s"):format(
+                missing_cnt > 1 and "parameters" or "parameter",
+                indent,
+                table.concat(missing, indent)
+            )
+
             return msg
         end
 
