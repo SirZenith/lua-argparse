@@ -182,7 +182,7 @@ subcommands respectively.
   event with `--show-all` flag.
 - `topics`: A list of topic this command belongs to. Userful for filtering help
   message output.
-- `no_helper_cmd`: Only used during construction, when set to true, no help subcommand
+- `no_help_cmd`: Only used during construction, when set to true, no help subcommand
   will be created for this command.,
 
 ---
@@ -225,6 +225,12 @@ subcommands respectively.
 - `self:get_topic_list(): stirng[]`
 
   Returns a list of all available topics under this command.
+- `self:gen_completion_for_subcommands(): string[]`
+
+  Returns a unsorted list of all non-internal subcommands.
+- `self:gen_completion_for_flags(): stirng[]`
+
+  Returns a unsorted list of all non-internal flags.
 
 ## `ArgParser`
 
@@ -238,7 +244,7 @@ subcommands respectively.
 
 **Methods**
 
-- `self:parse_arg(cmd: Command, arg_in: string[]?): Command?, table<string, any>?, string?`,
+- `self:parse_arg(cmd: Command, arg_in: string[]?): Command, table<string, any>, string[]?`,
   - `cmd` is the target command tree that needs to be executed.
   - `arg_in` is string argument list, if its `nil`, global variable `arg` will be used.
 
